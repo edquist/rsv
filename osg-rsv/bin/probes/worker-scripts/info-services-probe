@@ -1,0 +1,275 @@
+#!/usr/bin/python
+
+"""
+gip_advertise RSV probe.
+Author: Brian Bockelman
+
+This probe tests the following metrics:
+   * org.osg.gip.consistency: The resource_group and resource entries in
+     config.ini agree with the registered names in OIM.  The SE names also
+     should match OIM.
+      * CRITICAL if no active, enabled resource_group/resource found
+      * UNKNOWN if MyOSG data is not valid XML
+      * CRITICAL if OIM resource_group does not match config.ini resource_group
+         * config.ini resource_group defaults to sitename if resource_group
+           value not present
+      * CRITICAL if OIM resource does not match config.ini resource
+         * config.ini resource defaults to sitename if resource value not
+           present
+   * org.osg.gip.freshness: The BDII data is less than 30 minutes old.
+   * org.osg.gip.se: One SRM endpoint exists; the SE has non-zero size.
+   * org.osg.gip.ce: One CE endpoint exists; total CPUs is non-zero.
+   * org.osg.gip.valid: The CE passes the GIP's self-consistency test.
+
+The probe can end up in UNKNOWN (i.e., unable to determine actual status)
+for the following reasons:
+   * Unable to read or parse config.ini.
+   * Unable to find any site data in OSG BDII.
+   * Unable to query the BDII.
+   * Unable to query MyOSG.
+By design, failure of any central service results in an UNKNOWN status, which
+is not counted against the site's availability metrics.
+
+"""
+
+import os
+import sys
+import socket
+import urllib2
+import ConfigParser
+
+from xml.dom.minidom import parse
+
+# Bootstrap the GIP
+if 'GIP_LOCATION' not in os.environ:
+    if 'VDT_LOCATION' in os.environ:
+        os.environ['GIP_LOCATION'] = os.path.join(os.environ['VDT_LOCATION'], 'gip')
+if 'GIP_LOCATION' in os.environ:
+    gip_dir = os.path.join(os.environ['GIP_LOCATION'], 'lib', 'python')
+    if gip_dir not in sys.path:
+        sys.path.append(gip_dir)
+
+try:
+   import gip_common
+except ImportError, ie:
+   print "Unable to import the GIP common library.  This likely indicates a bad environment."
+   print "The python search path is: %s." % ", ".join(sys.path)
+   sys.exit(1)
+
+try:
+    hostname = socket.gethostname()
+except:
+    hostname = 'UNKNOWN'
+
+class WarningException(Exception):
+    pass
+
+class CriticalException(Exception):
+    pass
+
+class UnknownException(Exception):
+    pass
+
+
+# Global variables
+myosg_url = "https://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
+    "&summary_attrs_showservice=on&all_resources=on"
+
+all_results_xml = """
+<?xml version="1.0" encoding="ISO8859-1" ?>
+<Results>
+%s
+</Results>
+"""
+
+metric_xml = """
+<Metric>
+  <Name>%(metric)s</Name>
+  <WorkerScriptOutput>
+    <ExitCode>%(exit_code)s</ExitCode>
+    <StdOut>%(stdout)s</StdOut>
+    <StdErr>%(stderr)s</StdErr>
+  </WorkerScriptOutput>
+</Metric>
+"""
+
+def verify_ldapsearch():
+    fd = os.popen("which ldapsearch")
+    result = fd.read()
+    if fd.close():
+        raise CriticalException("Unable to find ldapsearch on host %s." % \
+            hostname)
+
+def get_config_ini():
+    config_ini_path = os.path.join(os.environ.get("VDT_LOCATION", "/opt/vdt"),
+        "osg", "etc", "config.ini")
+    try:
+        fp = open(config_ini_path, 'r')
+    except:
+        raise UnknownException("Unable to open the config.ini at %s on host" \
+            " %s." % (config_ini_path, hostname))
+    try:
+        cp = ConfigParser.ConfigParser()
+        cp.readfp(fp)
+    except:
+        raise UnknownException("Unable to parse the config.ini at %s on host " \
+            "%s." % (config_ini_path, hostname))
+    return cp
+
+def get_config_ini_hostname(cp):
+    """
+    Change the hostname detected automatically to the one from config.ini
+    """
+    global hostname
+    hostname = gip_common.cp_get(cp, "Site Information", "host_name", hostname)
+
+def get_myosg_dom(config_ini):
+    global myosg_url
+    myosg_url = gip_common.cp_get(config_ini, "RSV", "myosg_url", myosg_url)
+    try:
+        fp = urllib2.urlopen(myosg_url)
+    except Exception, e:
+        raise UnknownException("Unable to contact MyOSG server.  Exception: " \
+            " %s." % str(e))
+    try:
+        dom = parse(fp)
+    except Exception, e:
+        raise UnknownException("Unable to parse MyOSG server data due to %s." \
+            % str(e))
+    return dom
+
+def get_resource_doms(dom, service="CE"):
+    """
+    Return a tuple of the resource_group_dom, resource_dom
+    """
+    if hostname == 'UNKNOWN':
+        raise UnknownException("Unable to determine CE's hostname.")
+    for resource_group_dom in dom.getElementsByTagName("ResourceGroup"):
+        for resource_dom in resource_group_dom.getElementsByTagName( \
+                "Resource"):
+            for service_dom in resource_dom.getElementsByTagName("Service"):
+                try:
+                    sname = service_dom.getElementsByTagName("Name")[0]
+                    sname = str(sname.firstChild.data)
+                except:
+                    continue
+                if sname != service:
+                    continue
+                try:
+                    shost = service_dom.getElementsByTagName("ServiceUri")[0]
+                    shost = str(shost.firstChild.data).split(":")[0]
+                except:
+                    continue
+                if shost == hostname:
+                    return resource_group_dom, resource_dom
+    raise CriticalException("Unable to find a OIM resource matching " \
+        "hostname %s." % hostname)
+
+def get_resource_group_name(resource_group_dom):
+    """
+    Determine the resource_group_name, given the resource_group dom object.
+    """
+    for child_dom in resource_group_dom.childNodes:
+        if child_dom.localName == "GroupName":
+            try:
+                resource_group_name = str(child_dom.firstChild.data)
+                return resource_group_name
+            except:
+                continue
+    raise UnknownException("Able to determine resource group, but could " \
+        "not find the resource_group name in the XML; probably a MyOSG issue.")
+
+def get_resource_name(resource_dom):
+    """
+    Determine the resource_name, given the resource dom object.
+    """
+    for child_dom in resource_dom.childNodes:
+        if child_dom.localName == "Name":
+            try:
+                resource_name = str(child_dom.firstChild.data)
+                return resource_name
+            except:
+                continue
+    raise UnknownException("Able to determine resource, but could " \
+        "not find the resource name in the XML; probably a MyOSG issue.")
+
+def metric_consistency(config_ini):
+    dom = get_myosg_dom(config_ini)
+    resource_group_dom, resource_dom = get_resource_doms(dom)
+
+    # Determine the resource names from OIM
+    resource_group_name = get_resource_group_name(resource_group_dom)
+    resource_name = get_resource_name(resource_dom)
+
+    # Determine the names from config.ini
+    cp = config_ini
+    ci_resource_name = gip_common.cp_get(cp, "Site Information", "resource",
+        gip_common.cp_get(cp, "Site Information", "site_name", "UNKNOWN"))
+    ci_resource_group_name = gip_common.cp_get(cp, "Site Information",
+        "resource_group", gip_common.cp_get(cp, "Site Information",
+        "site_name", "UNKNOWN"))
+    if ci_resource_name == "UNKNOWN":
+        raise CriticalException("Unable to find resource or sitename in " \
+            "Site Information section")
+    if ci_resource_group_name == "UNKNOWN":
+        raise CriticalException("Unable to find resource_group or sitename in "\
+            "Site Information section")
+
+    stdout  = "OIM Resource Name: %s\n" % resource_name
+    stdout += "config.ini Resource Name: %s\n" % ci_resource_name
+    stdout += "OIM Resource Group Name: %s\n" % resource_group_name
+    stdout += "config.ini Resource Group Name: %s\n" % ci_resource_group_name
+
+    # Compare the two
+    if resource_group_name != ci_resource_group_name:
+        raise CriticalException("Config.ini resource group name does not " \
+            "match the OIM resource group name.")
+    if resource_name != ci_resource_name:
+        raise CriticalException("Config.ini resource name does not match the" \
+            " OIM resource name.")
+
+    return stdout, ""
+
+def run_metric(metric_name, fcn, args, kwargs):
+    stdout, stderr = "", ""
+    try:
+        stdout, stderr = fcn(*args, **kwargs)
+        exit_code = 0
+    except WarningException, we:
+        if stdout:
+            stdout += "\n" + str(ue)
+        else:
+            stdout = str(we)
+        exit_code = 1
+    except CriticalException, ce:
+        if stdout:
+            stdout += "\n" + str(ce)
+        else:
+            stdout = str(ce)
+        exit_code = 2
+    except Exception, e:
+        # UnknownExceptions and all other Exceptions
+        if stdout:
+            stdout += "\n" + str(e)
+        else:
+            stdout = str(e)
+        exit_code = 3
+    try:
+        info = {"exit_code": str(exit_code), "metric": str(metric_name),
+            "stdout": str(stdout), "stderr": str(stderr)}
+        return metric_xml % info
+    except:
+        return ""
+
+def main():
+    config_ini = get_config_ini()
+    get_config_ini_hostname(config_ini)
+    metric_output = []
+    metric_output.append(run_metric("org.osg.gip.consistency",
+        metric_consistency, (config_ini,), {}))
+
+    print all_results_xml % "\n".join(metric_output)
+
+if __name__ == '__main__':
+    main()
+
