@@ -32,6 +32,7 @@ is not counted against the site's availability metrics.
 
 """
 
+import re
 import os
 import sys
 import socket
@@ -138,7 +139,7 @@ def get_myosg_dom(config_ini):
             % str(e))
     return dom
 
-def get_resource_doms(dom, service="CE"):
+def get_resource_doms(dom, service="CE", hostname=hostname):
     """
     Return a tuple of the resource_group_dom, resource_dom
     """
@@ -193,6 +194,50 @@ def get_resource_name(resource_dom):
     raise UnknownException("Able to determine resource, but could " \
         "not find the resource name in the XML; probably a MyOSG issue.")
 
+split_re = re.compile("\s*,?\s*")
+def se_consistency(config_ini, dom, sect, host):
+    resource_group_dom, resource_dom = get_resource_doms(dom, hostname=host,
+        service="SRMv2")
+    resource_name = get_resource_name(resource_dom)
+    ci_resource_name = gip_common.cp_get(config_ini, sect, "name", "CHANGEME")
+    if ci_resource_name == 'CHANGEME':
+        raise CriticalException("Could not find the 'name' attribute in the " \
+            "section [%s] of config.ini." % sect)
+    stdout  = "SRM host %s:\n" % host
+    stdout += "\t- config.ini name: %s" % ci_resource_name
+    stdout += "\t- OIM name: %s" % resource_name
+
+    if ci_resource_name != resoruce_name:
+        raise CriticalException("SE for SRM host %s has config.ini name %s" \
+            " which does not match the registered OIM name %s." % (host,
+            ci_resource_name, resource_name))
+
+    return stdout
+
+host_re = re.compile("^.*?://(.*):")
+def all_se_consistency(config_ini, dom):
+    all_stdout = []
+    for sect in config_ini.sections():
+        if not section.startswith("se") and not section.startswith("SE"):
+            continue
+        enabled = gip_common.cp_getBoolean(cp, section, "enabled")
+        if not enabled:
+            continue
+        srm = cp_get(cp, section, "srm_endpoint",
+            "httpg://UNKNOWN.example.com:8443/srm/v2/server")
+        srm_list = split_re.split(srm)
+        hosts = []
+        for srm in srm_list:
+            m = host_re.match(srm)
+            if m:
+                hosts.append(m.groups()[0])
+        if len(hosts) == 1 and hosts[0] == 'UNKNOWN.example.com':
+            raise CriticalException("Unable to determine srm_endpoint in " \
+                "section [%s] of config.ini" % sect)
+        for host in hosts:
+            all_stdout.append(se_consistency(config_ini, dom, sect, host))
+    return "\n".join(all_stdout)
+
 def metric_consistency(config_ini):
     dom = get_myosg_dom(config_ini)
     resource_group_dom, resource_dom = get_resource_doms(dom)
@@ -212,8 +257,8 @@ def metric_consistency(config_ini):
         raise CriticalException("Unable to find resource or sitename in " \
             "Site Information section")
     if ci_resource_group_name == "UNKNOWN":
-        raise CriticalException("Unable to find resource_group or sitename in "\
-            "Site Information section")
+        raise CriticalException("Unable to find resource_group or sitename"\
+            " in Site Information section")
 
     stdout  = "OIM Resource Name: %s\n" % resource_name
     stdout += "config.ini Resource Name: %s\n" % ci_resource_name
@@ -227,6 +272,8 @@ def metric_consistency(config_ini):
     if resource_name != ci_resource_name:
         raise CriticalException("Config.ini resource name does not match the" \
             " OIM resource name.")
+
+    stdout += "\n" + all_se_consistency(config_ini, dom)
 
     return stdout, ""
 
