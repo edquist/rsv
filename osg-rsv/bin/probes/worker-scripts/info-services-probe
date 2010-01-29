@@ -55,12 +55,28 @@ try:
 except ImportError, ie:
    print "Unable to import the GIP common library.  This likely indicates a bad environment."
    print "The python search path is: %s." % ", ".join(sys.path)
+   if 'VDT_LOCATION' not in os.environ:
+       print "Note: $VDT_LOCATION is not in environment."
+   else:
+       print "Note: $VDT_LOCATION=%s" % os.environ['VDT_LOCATION']
+   if 'GIP_LOCATION' not in os.environ:
+       print "Note: $GIP_LOCATION is not in environment."
+   else:
+       print "Note: $GIP_LOCATION=%s" % os.environ['GIP_LOCATION']
    sys.exit(1)
 
 try:
     hostname = socket.gethostname()
+    hostname = socket.getfqdn()
 except:
     hostname = 'UNKNOWN'
+
+if 'VDT_LOCATION' in os.environ:
+    fd = os.popen("source $VDT_LOCATION/setup.sh; echo $GLOBUS_HOSTNAME")
+    output = fd.read()
+    output = output.strip()
+    if not fd.close() and output:
+        hostname = output
 
 class WarningException(Exception):
     pass
@@ -102,13 +118,13 @@ def verify_ldapsearch():
             hostname)
 
 def get_config_ini():
-    config_ini_path = os.path.join(os.environ.get("VDT_LOCATION", "/opt/vdt"),
-        "osg", "etc", "config.ini")
+    vdt_location = os.environ.get("VDT_LOCATION", "/opt/vdt")
+    config_ini_path = os.path.join(vdt_location, "osg", "etc", "config.ini")
     try:
         fp = open(config_ini_path, 'r')
     except:
         raise UnknownException("Unable to open the config.ini at %s on host" \
-            " %s." % (config_ini_path, hostname))
+            " %s.  VDT_LOCATION=%s" % (config_ini_path, hostname, vdt_location))
     try:
         cp = ConfigParser.ConfigParser()
         cp.readfp(fp)
@@ -204,10 +220,10 @@ def se_consistency(config_ini, dom, sect, host):
         raise CriticalException("Could not find the 'name' attribute in the " \
             "section [%s] of config.ini." % sect)
     stdout  = "SRM host %s:\n" % host
-    stdout += "\t- config.ini name: %s" % ci_resource_name
+    stdout += "\t- config.ini name: %s\n" % ci_resource_name
     stdout += "\t- OIM name: %s" % resource_name
 
-    if ci_resource_name != resoruce_name:
+    if ci_resource_name != resource_name:
         raise CriticalException("SE for SRM host %s has config.ini name %s" \
             " which does not match the registered OIM name %s." % (host,
             ci_resource_name, resource_name))
@@ -218,12 +234,12 @@ host_re = re.compile("^.*?://(.*):")
 def all_se_consistency(config_ini, dom):
     all_stdout = []
     for sect in config_ini.sections():
-        if not section.startswith("se") and not section.startswith("SE"):
+        if not sect.startswith("se") and not sect.startswith("SE"):
             continue
-        enabled = gip_common.cp_getBoolean(cp, section, "enabled")
+        enabled = gip_common.cp_getBoolean(config_ini, sect, "enabled")
         if not enabled:
             continue
-        srm = cp_get(cp, section, "srm_endpoint",
+        srm = gip_common.cp_get(config_ini, sect, "srm_endpoint",
             "httpg://UNKNOWN.example.com:8443/srm/v2/server")
         srm_list = split_re.split(srm)
         hosts = []
