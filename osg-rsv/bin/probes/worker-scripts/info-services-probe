@@ -17,6 +17,11 @@ This probe tests the following metrics:
          * config.ini resource defaults to sitename if resource value not
            present
    * org.osg.gip.freshness: The BDII data is less than 30 minutes old.
+   * org.osg.gip.lastrun: The GIP has been run recently and all its providers
+     and probes have succeeded.
+      * UNKNOWN if unable to list or stat the temp directory
+      * WARNING if a provider is more than 10 minutes old
+      * CRITICAL if a provider is more than 20 minutes old or doesn't exist.
    * org.osg.gip.se: One SRM endpoint exists; the SE has non-zero size.
    * org.osg.gip.ce: One CE endpoint exists; total CPUs is non-zero.
    * org.osg.gip.valid: The CE passes the GIP's self-consistency test.
@@ -34,7 +39,11 @@ is not counted against the site's availability metrics.
 
 import re
 import os
+import md5
+import pwd
 import sys
+import stat
+import time
 import socket
 import urllib2
 import ConfigParser
@@ -70,6 +79,11 @@ try:
     hostname = socket.getfqdn()
 except:
     hostname = 'UNKNOWN'
+
+try:
+    username = pwd.getpwuid(os.geteuid())[0]
+except:
+    username = "UNKNOWN"
 
 if 'VDT_LOCATION' in os.environ:
     fd = os.popen("source $VDT_LOCATION/setup.sh; echo $GLOBUS_HOSTNAME")
@@ -293,6 +307,99 @@ def metric_consistency(config_ini):
 
     return stdout, ""
 
+def metric_gip_lastrun():
+
+    cp = gip_common.config()
+    plugin_dir = "$GIP_LOCATION/plugins"
+    cp_get = gip_common.cp_get
+    cp_getInt = gip_common.cp_getInt
+    plugin_dir = os.path.expandvars(cp_get(cp, "gip", "plugin_dir", plugin_dir))
+    provider_dir = "$GIP_LOCATION/providers"
+    provider_dir = os.path.expandvars(cp_get(cp, "gip", "provider_dir", provider_dir))
+    temp_dir = "$GIP_LOCATION/var/tmp"
+    temp_dir = os.path.expandvars(cp_get(cp, "gip", "temp_dir", temp_dir))
+    
+    freshness = 2*cp_getInt(cp, "gip", "freshness", 300) # WARNING level
+    cache_ttl = 2*cp_getInt(cp, "gip", "cache_ttl", 600) # CRITICAL level
+    
+    try:
+        provider_listing = os.listdir(provider_dir)
+    except:
+        raise UnknownException("Unable to list %s as user '%s'; this is " \
+            "needed to check GIP cache freshness." % (provider_dir, username))
+    try:
+        plugin_listing = os.listdir(plugin_dir)
+    except:
+        raise UnknownException("Unable to list %s as user '%s'; this is " \
+            "needed to check GIP cache for freshness." % (plugin_dir,
+            username))
+    stdout = "Provider dir: %s\nPlugin dir: %s\n\n" % (provider_dir, plugin_dir)
+
+    now = time.time()
+    min_age, max_age = now, None
+    for provider_name in provider_listing:
+        file = os.path.join(provider_dir, provider_name)
+        hash = calculate_hash(file)
+        file = os.path.join(temp_dir, provider_name + ".ldif." + hash)
+        try:
+            ctime = os.stat(file)[stat.ST_CTIME]
+        except:
+            raise CriticalException("Provider %s does not have an entry " \
+                "in the GIP cache (%s)." % (provider_name, file))
+        age = int(now - ctime)
+        if age > cache_ttl:
+            raise CriticalException("Provider %s last output is %i seconds" \
+            " old, above the maximum age of %i." % (provider_name, age,
+            cache_ttl))
+        if age > freshness:
+            raise WarningException("Provider %s last output is %i seconds" \
+            " old, above the warning threshold of %i." % (provider_name, age, 
+            freshness))
+        min_age = min(min_age, age)
+        max_age = max(max_age, age)
+    if min_age != now:
+        stdout += "Minimum provider age: %i\n" % min_age
+    if max_age != None:
+        stdout += "Maximum provider age: %i\n" % max_age
+
+    min_age, max_age = now, None
+    for plugin_name in plugin_listing:
+        file = os.path.join(plugin_dir, plugin_file)
+        hash = calculate_hash(file)
+        file = os.path.join(temp_dir, plugin_name + ".ldif." + hash)
+        try:
+            ctime = os.stat(file)[stat.ST_CTIME]
+        except:
+            raise CriticalException("Plugin %s does not have an entry " \
+                "in the GIP cache (%s)." % (plugin_name, file))
+        age = int(now - ctime)
+        if age > cache_ttl:
+            raise CriticalException("Plugin %s last output is %i seconds" \
+            " old, above the maximum age of %i." % (plugin_name, age, 
+            cache_ttle))
+        if age > freshness:
+            raise WarningException("Plugin %s last output is %i seconds" \
+            " old, above the warning threshold of %i." % (plugin_name, age,
+            freshness))
+        min_age = min(min_age, age)
+        max_age = max(max_age, age)
+    if min_age != now:
+        stdout += "Minimum plugin age: %i\n" % min_age
+    if max_age != None:
+        stdout += "Maximum plugin age: %i\n" % max_age
+
+    return stdout, ""
+
+def calculate_hash(filename):
+    try:
+        m = md5.md5()
+        m.update(open(filename, 'r').read())
+        return m.hexdigest()
+    except:
+        raise UnknownException("Unable to read %s as user %s; this is " \
+            "needed to check GIP cache for freshness.  Exception:" \
+            % (filename, username))
+
 def run_metric(metric_name, fcn, args, kwargs):
     stdout, stderr = "", ""
     try:
@@ -330,6 +437,8 @@ def main():
     metric_output = []
     metric_output.append(run_metric("org.osg.gip.consistency",
         metric_consistency, (config_ini,), {}))
+    metric_output.append(run_metric("org.osg.gip.lastrun",
+        metric_gip_lastrun, tuple(), {}))
 
     print all_results_xml % "\n".join(metric_output)
 
