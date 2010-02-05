@@ -96,6 +96,7 @@ sub Run {
 
 sub Process_Informational_Arguments {
     my @metrics = ("consistency",
+                   "freshness",
                    "lastrun",
                   );
     if (defined ($o{'listmetric'})) {

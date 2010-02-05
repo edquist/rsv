@@ -116,6 +116,9 @@ if 'VDT_LOCATION' in os.environ:
     if not fd.close() and output:
         hostname = output
 
+MAX_TIMESTAMP_AGE = 30*60
+WARNING_TIMESTAMP_AGE = 20*60
+
 class WarningException(Exception):
     pass
 
@@ -332,8 +335,11 @@ def metric_consistency(config_ini):
     return stdout, ""
 
 def metric_gip_lastrun():
-    sys.argv = [sys.argv[0]]
-    cp = gip_common.config()
+    try:
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
     plugin_dir = "$GIP_LOCATION/plugins"
     cp_get = gip_common.cp_get
     cp_getInt = gip_common.cp_getInt
@@ -424,6 +430,51 @@ def calculate_hash(filename):
             "needed to check GIP cache for freshness.  Exception:" \
             % (filename, username))
 
+def metric_freshness():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+
+        gip_cluster = __import__("gip_cluster")
+        cid = gip_cluster.getClusterID(cp)
+        cname = "GlueClusterUniqueID=%s" % cid
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+
+    gip_ldap = __import__("gip_ldap")
+    try:
+        entries = gip_ldap.read_bdii(cp, "(&(objectClass=GlueLocation)" \
+            "(GlueLocationName=TIMESTAMP))")
+    except:
+        raise UnknownException("Unable to read data from BDII to perform" \
+            " RSV test.  This may indicate a central BDII issue and is not" \
+            " a site failure.")
+
+    now = time.time()
+    timestamp = 0
+    for entry in entries:
+        if cname in entry.dn:
+            try:
+                timestamp = int(float(entry.glue['LocationVersion']))
+                break
+            except:
+                raise CriticalException("Unable to parse timestamp out of" \
+                    "LDIF entry:%s" % entry.to_ldif())
+    if not timestamp:
+        raise CriticalException("Unable to find timestamp entry for cluster" \
+            " %s" % cid)
+    age = now - timestamp
+    if age > MAX_TIMESTAMP_AGE:
+        raise CriticalException("BDII information is %i seconds old, more " \
+            "than the critical threshold of %i." % (age, MAX_TIMESTAMP_AGE))
+    if age > WARNING_TIMESTAMP_AGE:
+        raise WarningException("BDII information is %i seconds old, more " \
+            "than the warning threshold of %i." % (age, WARNING_TIMESTAMP_AGE))
+
+    stdout = "BDII information is %i seconds old." % age
+    return stdout, ""
+
 def run_metric(metric_name, fcn, args, kwargs):
     stdout, stderr = "", ""
     try:
@@ -465,6 +516,9 @@ def main():
     elif metricname == "org.osg.gip.lastrun":
         metric_output.append(run_metric(metricname,
             metric_gip_lastrun, tuple(), {}))
+    elif metricname == "org.osg.gip.freshness":
+        metric_output.append(run_metric(metricname,
+            metric_freshness, tuple(), {}))
     else:
         print "Unknown metric: %s" % metricname
         sys.exit(2)
