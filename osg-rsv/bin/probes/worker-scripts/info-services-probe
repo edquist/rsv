@@ -46,9 +46,33 @@ import stat
 import time
 import socket
 import urllib2
+import optparse
 import ConfigParser
 
 from xml.dom.minidom import parse
+
+# Prepare the environment for the rest of the script.  Includes:
+#   * $VDT_LOCATION
+#   * name of metric
+#   * hostname
+#   * username of user running this script
+
+def parse_args():
+    global metricname
+    parser = optparse.OptionParser()
+    parser.add_option("--vdt-location", dest="vdt_loc",
+        help="Value of $VDT_LOCATION, if not in environment")
+    parser.add_option("--metric", dest="metric", help="Metric to run")
+    opts, args = parser.parse_args()
+    if opts.vdt_loc:
+        os.environ['VDT_LOCATION'] = opts.vdt_loc
+    if not opts.metric:
+        parser.print_help()
+        print "No metric name specified!"
+        sys.exit(2)
+    metricname = opts.metric
+
+parse_args()
 
 # Bootstrap the GIP
 if 'GIP_LOCATION' not in os.environ:
@@ -72,7 +96,7 @@ except ImportError, ie:
        print "Note: $GIP_LOCATION is not in environment."
    else:
        print "Note: $GIP_LOCATION=%s" % os.environ['GIP_LOCATION']
-   sys.exit(1)
+   sys.exit(2)
 
 try:
     hostname = socket.gethostname()
@@ -308,7 +332,7 @@ def metric_consistency(config_ini):
     return stdout, ""
 
 def metric_gip_lastrun():
-
+    sys.argv = [sys.argv[0]]
     cp = gip_common.config()
     plugin_dir = "$GIP_LOCATION/plugins"
     cp_get = gip_common.cp_get
@@ -435,10 +459,15 @@ def main():
     config_ini = get_config_ini()
     get_config_ini_hostname(config_ini)
     metric_output = []
-    metric_output.append(run_metric("org.osg.gip.consistency",
-        metric_consistency, (config_ini,), {}))
-    metric_output.append(run_metric("org.osg.gip.lastrun",
-        metric_gip_lastrun, tuple(), {}))
+    if metricname == "org.osg.gip.consistency":
+        metric_output.append(run_metric(metricname,
+            metric_consistency, (config_ini,), {}))
+    elif metricname == "org.osg.gip.lastrun":
+        metric_output.append(run_metric(metricname,
+            metric_gip_lastrun, tuple(), {}))
+    else:
+        print "Unknown metric: %s" % metricname
+        sys.exit(2)
 
     print all_results_xml % "\n".join(metric_output)
 
