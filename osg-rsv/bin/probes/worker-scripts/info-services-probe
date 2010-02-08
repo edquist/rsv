@@ -50,6 +50,7 @@ import optparse
 import ConfigParser
 
 from xml.dom.minidom import parse
+from xml.sax.saxutils import escape
 
 # Prepare the environment for the rest of the script.  Includes:
 #   * $VDT_LOCATION
@@ -130,7 +131,7 @@ class UnknownException(Exception):
 
 
 # Global variables
-myosg_url = "https://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
+myosg_url = "http://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
     "&summary_attrs_showservice=on&all_resources=on"
 
 all_results_xml = """
@@ -185,7 +186,13 @@ def get_myosg_dom(config_ini):
     global myosg_url
     myosg_url = gip_common.cp_get(config_ini, "RSV", "myosg_url", myosg_url)
     try:
-        fp = urllib2.urlopen(myosg_url)
+        proxy_url = os.environ.get("http_proxy", None)
+        if proxy_url:
+            proxy_handler = urllib2.ProxyHandler({'http': proxy_url})
+            opener = urllib2.build_opener(proxy_handler)
+            fp = opener.open(myosg_url)
+        else:
+            fp = urllib2.urlopen(myosg_url)
     except Exception, e:
         raise UnknownException("Unable to contact MyOSG server.  Exception: " \
             " %s." % str(e))
@@ -439,8 +446,12 @@ def metric_freshness():
         gip_cluster = __import__("gip_cluster")
         cid = gip_cluster.getClusterID(cp)
         cname = "GlueClusterUniqueID=%s" % cid
+        gname = gip_common.cp_get(cp, "site", "group", "OSG")
     except:
         raise UnknownException("Unable to open and parse config.ini.")
+
+    if gname == 'OSG-ITB':
+        cp.set("bdii", "endpoint", "ldap://is-itb.grid.iu.edu:2170")
 
     gip_ldap = __import__("gip_ldap")
     try:
@@ -500,8 +511,9 @@ def run_metric(metric_name, fcn, args, kwargs):
             stdout = str(e)
         exit_code = 3
     try:
-        info = {"exit_code": str(exit_code), "metric": str(metric_name),
-            "stdout": str(stdout), "stderr": str(stderr)}
+        info = {"exit_code": escape(str(exit_code)),
+            "metric": escape(str(metric_name)),
+            "stdout": escape(str(stdout)), "stderr": escape(str(stderr))}
         return metric_xml % info
     except:
         return ""
