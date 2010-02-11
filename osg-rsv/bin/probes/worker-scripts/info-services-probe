@@ -451,7 +451,21 @@ def metric_freshness():
         raise UnknownException("Unable to open and parse config.ini.")
 
     if gname == 'OSG-ITB':
-        cp.set("bdii", "endpoint", "ldap://is-itb.grid.iu.edu:2170")
+        stdout = "Setting BDII server to is-itb2.grid.iu.edu based on grid " \
+            "name OSG-ITB.\n"
+        cp.set("bdii", "endpoint", "ldap://is-itb2.grid.iu.edu:2170")
+    else:
+        stdout = "Setting BDII server to default based on grid name %s.\n" \
+            % gname
+
+    my_bdii = cp.get("bdii", "endpoint")
+
+    fd = os.popen("which ldapsearch")
+    fd.read()
+    if fd.close():
+        raise UnknownException("Unable to test BDII endpoint %s for CE " \
+            "information for cluster %s because ldapsearch command was not " \
+            "found." % (my_bdii, cid))
 
     gip_ldap = __import__("gip_ldap")
     try:
@@ -464,26 +478,34 @@ def metric_freshness():
 
     now = time.time()
     timestamp = 0
+    all_entries = []
     for entry in entries:
+        all_entries.append("dn: %s" % ", ".join(entry.dn))
         if cname in entry.dn:
             try:
                 timestamp = int(float(entry.glue['LocationVersion']))
                 break
             except:
                 raise CriticalException("Unable to parse timestamp out of" \
-                    "LDIF entry:%s" % entry.to_ldif())
+                    "LDIF entry:\n- %s" % "\n- ".join(entry.to_ldif().\
+                    splitlines()))
     if not timestamp:
         raise CriticalException("Unable to find timestamp entry for cluster" \
-            " %s" % cid)
+            " %s in BDII %s.  This is likely a subtle bug; contact osg-gip@" \
+            "opensciencegrid.org for assistance" % (cid, my_bdii))
     age = now - timestamp
     if age > MAX_TIMESTAMP_AGE:
-        raise CriticalException("BDII information is %i seconds old, more " \
-            "than the critical threshold of %i." % (age, MAX_TIMESTAMP_AGE))
+        raise CriticalException("BDII information at %s is %i seconds old, " \
+            "more than the critical threshold of %i.  LDAP:\n- %s" % (my_bdii,
+             age, MAX_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().\
+             splitlines())))
     if age > WARNING_TIMESTAMP_AGE:
-        raise WarningException("BDII information is %i seconds old, more " \
-            "than the warning threshold of %i." % (age, WARNING_TIMESTAMP_AGE))
+        raise WarningException("BDII information at %s is %i seconds old, " \
+            "more than the warning threshold of %i  LDAP:\n- %s." % (my_bdii,
+            age, WARNING_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().\
+            splitlines())))
 
-    stdout = "BDII information is %i seconds old." % age
+    stdout += "BDII information is %i seconds old." % age
     return stdout, ""
 
 def run_metric(metric_name, fcn, args, kwargs):
