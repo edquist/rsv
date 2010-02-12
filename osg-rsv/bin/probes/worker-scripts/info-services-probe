@@ -203,11 +203,13 @@ def get_myosg_dom(config_ini):
             % str(e))
     return dom
 
-def get_resource_doms(dom, service="CE", hostname=hostname):
+def get_resource_doms(dom, service="CE", myhostname=None):
     """
     Return a tuple of the resource_group_dom, resource_dom
     """
-    if hostname == 'UNKNOWN':
+    if myhostname == None:
+        myhostname = hostname
+    if myhostname == 'UNKNOWN':
         raise UnknownException("Unable to determine CE's hostname.")
     for resource_group_dom in dom.getElementsByTagName("ResourceGroup"):
         for resource_dom in resource_group_dom.getElementsByTagName( \
@@ -225,10 +227,10 @@ def get_resource_doms(dom, service="CE", hostname=hostname):
                     shost = str(shost.firstChild.data).split(":")[0]
                 except:
                     continue
-                if shost == hostname:
+                if shost == myhostname:
                     return resource_group_dom, resource_dom
     raise CriticalException("Unable to find a OIM resource matching " \
-        "hostname %s." % hostname)
+        "hostname %s." % myhostname)
 
 def get_resource_group_name(resource_group_dom):
     """
@@ -260,7 +262,7 @@ def get_resource_name(resource_dom):
 
 split_re = re.compile("\s*,?\s*")
 def se_consistency(config_ini, dom, sect, host):
-    resource_group_dom, resource_dom = get_resource_doms(dom, hostname=host,
+    resource_group_dom, resource_dom = get_resource_doms(dom, myhostname=host,
         service="SRMv2")
     resource_name = get_resource_name(resource_dom)
     ci_resource_name = gip_common.cp_get(config_ini, sect, "name", "CHANGEME")
@@ -331,8 +333,9 @@ def metric_consistency(config_ini):
 
     # Compare the two
     if resource_group_name != ci_resource_group_name:
-        raise CriticalException("Config.ini resource group name does not " \
-            "match the OIM resource group name.")
+        raise CriticalException("Config.ini resource group name '%s' does not "\
+            "match the OIM resource group name '%s'." % (ci_resource_group_name,
+            resource_group_name))
     if resource_name != ci_resource_name:
         raise CriticalException("Config.ini resource name does not match the" \
             " OIM resource name.")
