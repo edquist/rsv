@@ -1,11 +1,9 @@
 #!/bin/sh
-## $Id: classad-valid-probe-worker.sh,v 1.5 2008/07/08 13:06:06 agopu Exp $
 
 ###############################################################################
 ##
-## Author: Thomas Wang
-## Last modified by Arvind Gopu (on date shown above) 
-## Open Science Grid Operations Team, Indiana University
+## ReSS Project, Fermi National Accelerator Laboratory
+## Original Author(s): Parag Mhashilkar 
 ##
 ## This script prints out validation attributes in site classads from ReSS.
 ##  It's used by the classads-valid-probe as a worker script
