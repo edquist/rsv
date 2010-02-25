@@ -422,6 +422,10 @@ sub Init_Dependencies {
 	$o{'proxyExpiryWarningHours'}*60*60;          ## Convert to seconds
     $o{'proxyExpiryMinimumSeconds'} = 
 	$o{'proxyExpiryMinimumHours'}*60*60;
+    ## For RESS-CLASSAD-EXISTS-PROBE
+    $o{'ressClassadExistsWorkerScriptFile'} = "$o{'PROBE_DIR_LOCAL'}worker-scripts/ress-classad-exists-probe-worker.sh" if (!defined ($o{'ressClassadExistsWorkerScriptFile'}));
+    ## For CEMON-CONTAINERKEYFILE-CE-PERMISSIONS-PROBE
+    $o{'cemoncontainerkeyfileWorkerScriptFile'} = "$o{'PROBE_DIR_LOCAL'}worker-scripts/cemon-containerkeyfile-ce-permissions-worker" if (!defined ($o{'cemoncontainerkeyfileWorkerScriptFile'}));
 
     
     ## GLOBUS STUFF
