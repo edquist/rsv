@@ -4,8 +4,8 @@
 ##
 ## Copyright 2009, The Trustees of Indiana University. 
 ##
-## Open Science Grid Operations Team, Indiana University
-## Original Author(s): Thomas Wang, Arvind Gopu (http://peart.ucs.indiana.edu)
+## ReSS Project, Fermi National Accelerator Laboratory
+## Original Author(s): Parag Mhashilkar 
 ##
 ## This Perl script tests if classad attributes on a resource are valid
 ## Type ./classad-valid-probe -h for more information
@@ -107,9 +107,10 @@ sub Run {
     ## run command to get classadValid data
     my $ressClassadExistsCmd = " $o{'shCmd'} $o{'ressClassadExistsWorkerScriptFile'} --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
     &RSVProbeBase::Run_Command ($ressClassadExistsCmd, "backtick");
-    
+
     ## Store Results in array for processing
     my @classad_array = split (/\n/, &RSVProbeBase::Get_DetailsData());
+
 
     ## Check if the provided resource was even found on the ReSS collector;  
     &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}. Check if the cemon on the host is configured to advertise to the $o{'classadRessCollectorHost'}. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n")
@@ -118,9 +119,12 @@ sub Run {
     &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
         if ($classad_array[0] eq "condor_status command not found");
 
+    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_cron_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
+        if ($classad_array[0] eq "condor_cron_status command not found");
+
     ## Resource found
     $ressClassadExists=$ok;
-    &RSVProbeBase::Exit_Error (0, "ReSS Collector=$o{'classadRessCollectorHost'}\n$classad_array[0]\n$classad_array[1]\nressClassadExists=true\n")  
+    &RSVProbeBase::Exit_Error (0, "ReSS Collector=$o{'classadRessCollectorHost'}\nressClassadExists=true\n")  
 	if ($ressClassadExists == $ok);
     ## Since all are Valid, only GlueSiteName, GlueCEInfoContactString, and the ressClassadExists attrib
    
