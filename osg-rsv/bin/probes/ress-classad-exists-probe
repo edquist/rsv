@@ -38,7 +38,7 @@ our %metric;    *metric    = \%RSVProbeBase::metric;
 
 sub Init {
 
-    &RSVProbeBase::Set_MetricName ("org.osg.general.ress-classad-exists");
+    &RSVProbeBase::Set_MetricName ("org.osg.ress.ress-classad-exists");
 
     ## Pass "status" or "performance" depending on metric type
     &RSVProbeBase::Set_MetricType ("status");
@@ -113,7 +113,7 @@ sub Run {
 
 
     ## Check if the provided resource was even found on the ReSS collector;  
-    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}. Check if the cemon on the host is configured to advertise to the $o{'classadRessCollectorHost'}. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n")
+    &RSVProbeBase::Exit_Error (2, "CRITICAL: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}. Check if the cemon on the host is configured to advertise to the $o{'classadRessCollectorHost'}. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n")
         if ($no_match eq $classad_array[0]);
 
     &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    

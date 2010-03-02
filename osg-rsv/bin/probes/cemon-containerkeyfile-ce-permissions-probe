@@ -39,7 +39,7 @@ our %metric;    *metric    = \%RSVProbeBase::metric;
 
 sub Init {
 
-    &RSVProbeBase::Set_MetricName ("org.osg.general.cemon-containerkeyfile-CE-permissions");
+    &RSVProbeBase::Set_MetricName ("org.osg.ress.cemon-containerkeyfile-CE-permissions");
 
     ## Pass "status" or "performance" depending on metric type
     &RSVProbeBase::Set_MetricType ("status");
