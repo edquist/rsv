@@ -110,7 +110,7 @@ sub Run {
 
     ## Check if the provided resource was even found on the ReSS collector;  
     &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find the worker script $worker_script to execute. Check if your environment is setup correctly to run RSV probes and the worker script exists\n")
-        if (not -e $worker_script);
+        if ( (not -e $worker_script) or (not -f $worker_script) );
 
 
     ## run command to get classadValid data
@@ -119,7 +119,6 @@ sub Run {
 
     ## Store Results in array for processing
     my @classad_array = split (/\n/, &RSVProbeBase::Get_DetailsData());
-
 
     ## Check if the provided resource was even found on the ReSS collector;  
     &RSVProbeBase::Exit_Error (2, "CRITICAL: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}. Check if the cemon on the host is configured to advertise to the $o{'classadRessCollectorHost'}. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n")
@@ -130,6 +129,10 @@ sub Run {
 
     &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_cron_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
         if ($classad_array[0] eq "condor_cron_status command not found");
+
+
+    &RSVProbeBase::Exit_Error (2, "UNKNOWN: There was a problem executing the worker script $worker_script Worker script exited with status $o{cmdExitValue}\n")
+        if (($o{cmdExitValue} eq 1) or ($o{cmdExitValue} gt 2));
 
     ## Resource found
     $ressClassadExists=$ok;
