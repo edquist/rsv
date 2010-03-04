@@ -108,6 +108,11 @@ sub Run {
     # Otherwise, use the default defined here
     my $worker_script = $o{'ressClassadExistsWorkerScriptFile'} || "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ress-classad-exists-probe-worker.sh";
 
+    ## Check if the provided resource was even found on the ReSS collector;  
+    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find the worker script $worker_script to execute. Check if your environment is setup correctly to run RSV probes and the worker script exists\n")
+        if (not -e $worker_script);
+
+
     ## run command to get classadValid data
     my $ressClassadExistsCmd = " $o{'shCmd'} $worker_script --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
     &RSVProbeBase::Run_Command ($ressClassadExistsCmd, "backtick");
