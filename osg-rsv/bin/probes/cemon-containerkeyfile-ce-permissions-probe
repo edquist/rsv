@@ -69,7 +69,7 @@ sub Init {
 	(" [--worker-script-file <file>     Worker script file to use.");
 
     ## Uncomment if you want additional command line options
-     &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","cemoncontainerkeyfileWorkerScriptFile");
+    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","cemoncontainerkeyfileWorkerScriptFile");
 
     &RSVProbeBase::Set_DetailsDataTrim ("False");
 }
@@ -89,7 +89,11 @@ sub Run {
 
     $certkey_to_test .= "\'";
 
-    &RSVProbeBase::Globus_Job_Run (" -s $o{'cemoncontainerkeyfileWorkerScriptFile'} 2>&1 ", "backtick");
+    # If a custom worker script was passed in on the command line, it will be in $o{'cemoncontainerkeyfileWorkerScriptFile'}
+    # Otherwise, use the default defined here
+    my $worker_script = $o{'cemoncontainerkeyfileWorkerScriptFile'} || "$o{'PROBE_DIR_LOCAL'}/worker-scripts/cemon-containerkeyfile-ce-permissions-worker";
+
+    &RSVProbeBase::Globus_Job_Run (" -s $worker_script 2>&1 ", "backtick");
     &RSVProbeBase::Parse_Xml ("Attempted to get permission information using Globus job -s $o{'cemoncontainerkeyfileWorkerScriptFile'} 2>&1");
 
     my $keyfile_path = $o{'cmdOutHash'}{'StdOut'}{'File'}{'Path'};

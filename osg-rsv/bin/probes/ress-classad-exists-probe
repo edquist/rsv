@@ -104,8 +104,12 @@ sub Run {
     ## modification to worker-script for returned string - serviceUri not found on ReSS collector
     my $no_match = "no match"; 
 
+    # If a custom worker script was passed in on the command line, it will be in $o{'ressClassadExistsWorkerScriptFile'}
+    # Otherwise, use the default defined here
+    my $worker_script = $o{'ressClassadExistsWorkerScriptFile'} || "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ress-classad-exists-probe-worker.sh";
+
     ## run command to get classadValid data
-    my $ressClassadExistsCmd = " $o{'shCmd'} $o{'ressClassadExistsWorkerScriptFile'} --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
+    my $ressClassadExistsCmd = " $o{'shCmd'} $worker_script --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
     &RSVProbeBase::Run_Command ($ressClassadExistsCmd, "backtick");
 
     ## Store Results in array for processing
