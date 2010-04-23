@@ -75,7 +75,7 @@ sub Run {
     &RSVProbeBase::Get_Remote_Env ();
 
     if (!defined($o{'infoServicesProbeWorkerScriptFile'})) {
-        $o{'infoServicesProbeWorkerScriptFile'} = "$ENV{'VDT_LOCATION'}/osg-rsv/bin/probes/worker-script/info-services-probe";
+        $o{'infoServicesProbeWorkerScriptFile'} = "$ENV{'VDT_LOCATION'}/osg-rsv/bin/probes/worker-scripts/info-services-probe";
     }
 
     my $metricname = &RSVProbeBase::Get_MetricName();
