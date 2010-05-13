@@ -1,0 +1,119 @@
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-ping
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 26 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-put
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 7 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-get
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 50 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-bringonline
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 22 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-push
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 46 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-pull
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 57 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-gsiftp
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 17 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-ls
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 43 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-mv
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 32 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-srmrm
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 44 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-mkdir
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 9 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-rmdir
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 21 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-reserve
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 40 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-getspacemeta
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 31 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-getspacetokens
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 38 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-release
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 28 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmtester-gettransferprotocols
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 1 * * * *
+EOT

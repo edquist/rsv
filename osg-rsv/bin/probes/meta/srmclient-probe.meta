@@ -1,0 +1,70 @@
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-ping
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 22 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-put
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 18 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-get
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 16 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-copy
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 36 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-reservespace
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 38 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-releasespace
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 36 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-rm
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 14 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-mkdir
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 40 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-rmdir
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 14 * * * *
+EOT
+serviceType: OSG-SRM
+metricName: org.osg.srm.srmclient-mv
+metricType: status
+probeType: OSG-SRM
+enableByDefault: false
+metricInterval: 54 * * * *
+EOT
