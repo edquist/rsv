@@ -367,6 +367,23 @@ sub Run {
         	&RSVProbeBase::Run_Command ($rm_cmd, "backtick");
 
 	}
+	if ($probe_name eq "mv")
+	{
+		my $srmtester_rmcmd=$o{'srmtesterDir'}.
+                        "/srm-tester -serviceurl " .
+                        $o{'srmServiceType'} . "://" .
+                        $o{'hostName'} . ":".
+                        $o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
+                        " -op srmrm" .
+                        " -localsource " . $o{'srmcpTestfile'} .
+                        " -localtargetdir " . $o{'slashTmp'} .
+                        " -remotesfn " . $remotesfn .
+                        " -localtargetdir " . $o{'slashTmp'} .
+                        " -gsiftpcopysource gsiftp://" . $o{'hostName'}
+                        . "/" . $copysource;
+        	&RSVProbeBase::Run_Command ($srmtester_rmcmd, "backtick");
+	}
+
 
 	&RSVProbeBase::Set_Summary_Metric_Results ($output_value, "SRM tester finished on $metric{'hostName'}. Output: $cmd_output");
         &RSVProbeBase::Print_Metric();
