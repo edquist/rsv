@@ -329,8 +329,19 @@ sub Run {
 	# Check the output for the summary section and then record the result.
 	my $line="";
 	my $output_value=3;
+	my $summary_yet=0;
 	foreach $line (split /\n/ ,$cmd_output)
 	{
+		if ($line=~/^\s*Summary\s*$/)
+		{
+			$summary_yet=1;
+		}
+		if (($line=~/:\s*Failed/)&&($summary_yet==1))
+		{
+			$summary_yet=2;
+		}
+
+		
 		# Check to see if the applicable test succeeded
 		# Note that getspacemeta is inconsistent
 		if (($line =~ /$testname{$probe_name}/)||
@@ -352,6 +363,15 @@ sub Run {
 		}
 		
 	}
+
+	# Mark the output as failed if another operation failed
+	# Leave untouched if marked as unsupported/unknown.
+	if (($summary_yet==2)&&($output_value==0))
+	{
+		$output_value=2;
+	}
+
+	
 	## If the result is unknown and previous dependencies
 	## are not supported, mark this as unsupported (warning)
 	if (($cmd_output =~ /SRM_NOT_SUPPORTED/)&&($output_value==3))
