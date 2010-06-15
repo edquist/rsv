@@ -1169,7 +1169,13 @@ sub Check_Freshness_Local_CRL{
     my $status_code = 0; # Return status code as expected by RSV for summaryData
     my $status_out = ""; # Compile detailed data for output by RSV
     my %source;
+    my %source_newhash;
     my %found_crls;
+    my $itb = 0;
+    my $ca_format_type = 0;
+    my $cmd;
+    my @contents;
+    my $type = 0; #openssl v < 1.
 
     $o{'callingRoutine'} = "Check_Freshness_Local_CRL()";
 
@@ -1178,7 +1184,24 @@ sub Check_Freshness_Local_CRL{
     my $working_dir = tempdir("osgrsv-crl`-XXXXXX", TMPDIR => 1, CLEANUP => 1);
     chdir($working_dir);
     my $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
-    my $cmd = "wget $local_url 2>&1";
+    #Check if the file CA cers are installed from ITB
+    my $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
+    if (!$o{'localCE'}){
+        $cmd = "-s  $ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
+    }else{
+        $cmd = "$ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        &RSVProbeBase::Run_Command ($cmd, "backtick");
+    }
+    @contents = split /\n/, $o{'cmdOut'};
+
+    if ($contents[0] =~ /ITB/i) {
+        $itb=1;
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }
+    $ca_format_type=$contents[1];
+
+    $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
     chdir($cwd); 
     if ($o{'cmdExitValue'} !=0){
@@ -1191,7 +1214,7 @@ sub Check_Freshness_Local_CRL{
     my $ca_index_file = "$working_dir/".basename($local_url);
 
     open FILE, "< $ca_index_file" or &RSVProbeBase::Set_Summary_Metric_Results (3,"The downloaded CA list from OSG could not be opened. Unable to test CRLs.") && return \%metric; 
-    my @contents = <FILE>;  
+    @contents = <FILE>;  
     foreach my $line (@contents) {
         next if($line =~ /^Hash/i);
         next if($line =~ /^--/i);
@@ -1201,6 +1224,11 @@ sub Check_Freshness_Local_CRL{
         my @line_content = split /\s+/, $line;
         my $hash = $line_content[0];
         $source{$hash}=$line_content[$#line_content];
+        if ($ca_format_type==1){
+	     # New format. Also consider a new hash
+             my $new_hash=$line_content[1];
+             $source_newhash{$new_hash}=$line_content[$#line_content];
+        }
     }
     close FILE;
  
@@ -1233,9 +1261,24 @@ sub Check_Freshness_Local_CRL{
         # List of CRLs found.
         $found_crls{$local_hash} = $local_hash;
 
-        next if (!exists $source{$local_hash}); # Ignore CRLs not from OSG.
 
-        next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
+        #next if (!exists $source{$local_hash}); 
+        # Ignore CRLs not from OSG.
+        next if ($ca_format_type==0 && !exists $source{$local_hash});
+        next if ($ca_format_type==1 && !(exists $source{$local_hash} || exists $source_newhash{$local_hash}));
+
+        #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); 
+        #For EGEE test we want to check only IGTF CAs
+        if (exists $source_newhash{$local_hash}){
+            # Assuming that the hash for CRL files will be either md5 or sha1 not both
+            $type=1;
+            next if ($o{'type'} =~ /egee/ &&  $source_newhash{$local_hash} !~ m/I/ ); 
+        }
+        if (exists $source{$local_hash}){
+            next if ($o{'type'} =~ /egee/ && $source{$local_hash} !~ m/I/ );
+        }
+        
+
         #my $last_update = (stat($local_crl_file))[9];
         my $now = time();
         if($now >= $last_update + $o{'errorHrs'}*60*60){
@@ -1255,14 +1298,28 @@ sub Check_Freshness_Local_CRL{
 
     # Step 3: Check if any CRLs are missing.
     my $missing_count = 0;
-    for my $local_hash ( keys %source ) {
-        next if ($o{'type'} =~ /^egee$/i &&  $source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs for wlcg probe
-        next if (exists $found_crls{$local_hash}); # CRL was present. 
-        next if (! -e "$o{'certDir'}/$local_hash.0"); # CA is not present 
-        $status_code = 1 if($status_code!=2);
-        $status_out .= "MISSING: CRL file for '$local_hash' is missing. OSG policy requires CRL for every CA distributed by OSG.\n";
-        $missing_count++;
-    }        
+    if ($type==0){
+       #MD5 hashes observed
+       for my $local_hash ( keys %source ) {
+            next if ($o{'type'} =~ /^egee$/i &&  $source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs for wlcg probe
+            next if (exists $found_crls{$local_hash}); # CRL was present. 
+            next if (! -e "$o{'certDir'}/$local_hash.0"); # CA is not present 
+            $status_code = 1 if($status_code!=2);
+            $status_out .= "MISSING: CRL file for '$local_hash' is missing. OSG policy requires CRL for every CA distributed by OSG.\n";
+            $missing_count++;
+        }
+    }elsif($type == 1){
+        #Sha1 hashes observed
+       for my $local_hash ( keys %source_newhash ) {
+            next if ($o{'type'} =~ /^egee$/i &&  $source_newhash{$local_hash} !~ /I/ ); # Ignore non IGTF CAs for wlcg probe
+            next if (exists $found_crls{$local_hash}); # CRL was present. 
+            next if (! -e "$o{'certDir'}/$local_hash.0"); # CA is not present 
+            $status_code = 1 if($status_code!=2);
+            $status_out .= "MISSING: CRL file for '$local_hash' is missing. OSG policy requires CRL for every CA distributed by OSG.\n";
+            $missing_count++;
+        }
+
+    }
     
 	# Step 4: See if the warning should be escalated to an error
     my $now = time();
@@ -1331,31 +1388,52 @@ sub Check_Local_CA{
     my %md5;
     my @error_hash;
     my @egee_error_hash;
+    my $cmd;
+    my @contents;
+    my $itb=0;
+    my $ca_format_type=0;
 
     $o{'callingRoutine'} = "Check_Local_CA()";
 
-    # Step 1: Download the md5sums for CAs in the OSG 
+    # Step 1: Download the md5sums for CAs in the OSG/ITB
     chomp(my $cwd = `pwd`);
     my $working_dir = tempdir("osgrsv-ca`-XXXXXX", TMPDIR => 1, CLEANUP => 1);
     chdir($working_dir);
     my $local_url="http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
-    my $cmd = "wget $local_url 2>&1";
+    #Check if the file CA cers are installed from ITB
+    my $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
+    if (!$o{'localCE'}){
+        $cmd = "-s  $ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
+    }else{
+        $cmd = "$ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        &RSVProbeBase::Run_Command ($cmd, "backtick");
+    }
+    @contents = split /\n/, $o{'cmdOut'};
+
+    if ($contents[0] =~ /ITB/i) {
+        $itb=1;
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
+    }
+    $ca_format_type=$contents[1];
+
+    $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
     my $local_md5_file = "$working_dir/".basename($local_url);
     chdir($cwd); 
     if ($o{'cmdExitValue'} !=0){
-        # Could not download the CA list from OSG. Setting test value as Unknown
+        # Could not download the CA list from OSG/ITB Cache. Setting test value as Unknown
         $status_code = 3;
         $status_out = " Could not download the md5sum for CA list from OSG ($local_url). Unable to verify CAs.";
         &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
         return \%metric;
     }
     open FILE, "< $local_md5_file" or &RSVProbeBase::Set_Summary_Metric_Results (3,"The downloaded md5sum file from OSG could not be opened. Unable to verify CAs.") && return \%metric; 
-    my @contents = <FILE>;
+    @contents = <FILE>;
     foreach my $line (@contents) {
         chomp($line);
         my @values = split /\s+/, $line;
-        chomp(my $local_hash = (split(/\.0/,$values[1]))[0]);
+        chomp(my $local_hash = (split(/\./,$values[1]))[0]);
         $md5{$local_hash} = $values[0];
     }
     close FILE;
@@ -1363,6 +1441,9 @@ sub Check_Local_CA{
     # Step 2: Get the list of Certs included in OSG from GOC website.
     chdir($working_dir);
     $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
+    if ($itb){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }
     my $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
     chdir($cwd); 
@@ -1374,7 +1455,6 @@ sub Check_Local_CA{
         return \%metric;
     }
     my $ca_index_file = "$working_dir/".basename($local_url);
-
     open FILE, "< $ca_index_file" or &RSVProbeBase::Set_Summary_Metric_Results (3,"The downloaded CA list from OSG could not be opened. Unable to verify CAs.") && return \%metric;
     @contents = <FILE>;  
     foreach my $line (@contents) {
@@ -1383,53 +1463,60 @@ sub Check_Local_CA{
         next if($line =~ /^\s+$/i); #Empty lines
         next if($line =~ /^\#/i); #allow comments in future
 	last if($line =~ /^Sources/i); #Reached end of file
+
 	my @line_content = split /\s+/, $line;
         my $hash = $line_content[0];
+	if ($ca_format_type == 1) {
+             # New CA format type we use file names
+	     $hash =  (split(/\./,$line_content[2]))[0];
+        }
         $source{$hash}=$line_content[$#line_content];
     }
     close FILE;
- 
+
     # Step 3: Get the list of CAs installed on remote CE and their md5sums
+    my $cert_files = "$o{'certDir'}/*.0";
+    if ($ca_format_type == 1) { 
+        $cert_files = "$o{'certDir'}/*.pem";
+    }
     if (!$o{'localCE'}){
-        $cmd = "-s  $o{'workerScriptFile'} \"$o{'certDir'}/*.0\" 2>/dev/null";
+        $cmd = "-s  $o{'workerScriptFile'} \"$cert_files\" 2>/dev/null";
         &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
     }else{
-        $cmd = "$o{'workerScriptFile'} \"$o{'certDir'}/*.0\" 2>/dev/null";
+        $cmd = "$o{'workerScriptFile'} \"$cert_files\" ";
         &RSVProbeBase::Run_Command ($cmd, "backtick");
     }
     @contents = split /\n/, $o{'cmdOut'};
 
     if ($contents[$#contents] != 0){
-        &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file at $o{'hostName'}:$o{'certDir'}/*.0.");
+        &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file at $o{'hostName'}:$cert_files.");
         return \%metric;
     }
     my %file_md5sum = ();
     for (my $i=0; $i<$#contents;$i++){
         my @tmp = split /\s+/, $contents[$i];
-        $file_md5sum{(split(/\.0/,basename($tmp[1])))[0]} = $tmp[0];
+        $file_md5sum{(split(/\./,basename($tmp[1])))[0]} = $tmp[0];
     }
 
     # Step 4: Check the CAs to ensure that md5sums matchup
     my $error_count = my $warn_count = my $ok_count = 0;
 
     foreach my $local_hash (keys %file_md5sum) {
-
         # List of CAs found.
         $found_cas{$local_hash} = $local_hash;
-        next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
+        next if (!exists $md5{$local_hash}); # Ignore CAs not from OSG.
+        #next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
 
         next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
 
         # Calculate md5sum of the CA
         my $local_md5 = $file_md5sum{$local_hash};
-
         if ($local_md5 != $md5{$local_hash}){
             # We have detected atleast a warning
             $status_code = 1;
             push @error_hash, $local_hash;
         }
     }
-    
     # Step 5: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
     my $missing_count = 0;
     if ($o{'type'} =~ /^egee$/i){
@@ -1475,8 +1562,8 @@ sub Check_Local_CA{
             close FILE;
             $status_out .= "WARNING: ";
         }
-        $status_out .= "A few of the files in your installation are out of sync with the OSG distribution.\n";
-        $status_out .= "\tThe CA(s) that are out of sync are: @error_hash \n";
+        $status_out .= "Few of the files in your installations are out of sync with the OSG diistribution.\n";
+        $status_out .= "\tThe CA that are out of sync are: @error_hash \n";
         $status_out .= "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n";
         $status_out .= "\t$missing_count IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n";
         $status_out .= "\tList of missing CAs include: @egee_error_hash.\n";
