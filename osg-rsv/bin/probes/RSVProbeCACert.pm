@@ -12,7 +12,7 @@ use File::Temp qw/ tempdir /;
 ## And alias to RSV::Probe_Base variables
 our %o;         *o         = \%RSVProbeBase::o;      
 our %metric;    *metric    = \%RSVProbeBase::metric;
-
+my $site_rsv_probe_version="1.1";
 
 ##---------------------------------------------------------------------
 ##
@@ -1167,7 +1167,7 @@ sub Check_VOMS{
 sub Check_Freshness_Local_CRL{
     
     my $status_code = 0; # Return status code as expected by RSV for summaryData
-    my $status_out = ""; # Compile detailed data for output by RSV
+    my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
     my %source;
     my %source_newhash;
     my %found_crls;
@@ -1207,7 +1207,7 @@ sub Check_Freshness_Local_CRL{
     if ($o{'cmdExitValue'} !=0){
         # Could not download the CA list from OSG. Setting test value as Unknown
         $status_code = 3;
-        $status_out = " Could not download the CA list from OSG ($local_url). Unable to test CRLs.";
+        $status_out .= " Could not download the CA list from OSG ($local_url). Unable to test CRLs.";
         &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
         return \%metric;
     }
@@ -1382,7 +1382,7 @@ sub Check_Freshness_Local_CRL{
 sub Check_Local_CA{
     
     my $status_code = 0; # Return status code as expected by RSV for summaryData
-    my $status_out = ""; # Compile detailed data for output by RSV
+    my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
     my %source;
     my %found_cas;
     my %md5;
@@ -1424,7 +1424,7 @@ sub Check_Local_CA{
     if ($o{'cmdExitValue'} !=0){
         # Could not download the CA list from OSG/ITB Cache. Setting test value as Unknown
         $status_code = 3;
-        $status_out = " Could not download the md5sum for CA list from OSG ($local_url). Unable to verify CAs.";
+        $status_out .= " Could not download the md5sum for CA list from OSG ($local_url). Unable to verify CAs.";
         &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
         return \%metric;
     }
@@ -1450,7 +1450,7 @@ sub Check_Local_CA{
     if ($o{'cmdExitValue'} !=0){
         # Could not download the CA list from OSG. Setting test value as Unknown
         $status_code = 3;
-        $status_out = " Could not download the CA list from OSG ($local_url). Unable to verify CAs";
+        $status_out .= " Could not download the CA list from OSG ($local_url). Unable to verify CAs";
         &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
         return \%metric;
     }
@@ -1562,7 +1562,7 @@ sub Check_Local_CA{
             close FILE;
             $status_out .= "WARNING: ";
         }
-        $status_out .= "Few of the files in your installations are out of sync with the OSG diistribution.\n";
+        $status_out .= "Few of the files in your installations are out of sync with the OSG distribution.\n";
         $status_out .= "\tThe CA that are out of sync are: @error_hash \n";
         $status_out .= "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n";
         $status_out .= "\t$missing_count IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n";
@@ -1599,7 +1599,7 @@ sub Check_Local_CA{
 sub Check_Supported_VO{
     
     my $status_code = 0; # Return status code as expected by RSV for summaryData
-    my $status_out = ""; # Compile detailed data for output by RSV
+    my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
     my $cmd = "";
     # Step 1: Run the probe code remotely/locally and get the result
     if (!$o{'localCE'}){
@@ -1611,9 +1611,10 @@ sub Check_Supported_VO{
     }
     if ($o{'cmdOut'} =~ /^$/){
         $status_code = 3;
-        $status_out="No result returned by running '$cmd'. Quitting.."
+        $status_out .= "No result returned by running '$cmd'. Quitting.."
     }else {
         ($status_code,$status_out) = split /<split>/, $o{'cmdOut'};
+        $status_out = "Security Probe Version: $site_rsv_probe_version\n$status_out";
     }
     &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
     return \%metric;
@@ -1640,7 +1641,7 @@ sub Check_Supported_VO{
 sub Check_VO_handshake{
     
     my $status_code = 0; # Return status code as expected by RSV for summaryData
-    my $status_out = ""; # Compile detailed data for output by RSV
+    my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
 
     $o{'callingRoutine'} = "Check_VO_handshake()";
 
@@ -1664,7 +1665,7 @@ sub Check_VO_handshake{
     ($status_code,$last_run) = split /<split>/, $o{'cmdOut'}; 
     chomp($last_run);
     if ($status_code!=0) {
-	$status_out=$last_run;
+	$status_out .= "$last_run\n";
     }
     elsif ($last_run =~ /^\s*$/) {
 	$status_out .= "UNKNOWN: edg-mkgridmap's log file did not provide us with required information";
@@ -1717,7 +1718,7 @@ sub Check_VO_handshake{
 sub Check_VO_handshake_success{
     
     my $status_code = 0; # Return status code as expected by RSV for summaryData
-    my $status_out = ""; # Compile detailed data for output by RSV
+    my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
 
     $o{'callingRoutine'} = "Check_VO_handshake_success()";
 
@@ -1743,7 +1744,7 @@ sub Check_VO_handshake_success{
     ($status_code,$cmd_out) = split /<split>/, $o{'cmdOut'};
     if ($status_code != 0){
         # Error in getting the edg log file
-        $status_out = "$cmd_out";
+        $status_out .= "$cmd_out";
         &RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
         return \%metric;
     }
@@ -1765,7 +1766,7 @@ sub Check_VO_handshake_success{
         }
     }
     if ($last_output =~ /Exit with error/i){
-        $status_out = "WARNING: Edg-mkgridmap could not download VO list from one or more VOs:\n\n".$last_output;
+        $status_out .= "WARNING: Edg-mkgridmap could not download VO list from one or more VOs:\n\n".$last_output;
         $status_code = 1;
     }
 
