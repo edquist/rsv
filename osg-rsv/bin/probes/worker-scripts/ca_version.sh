@@ -1,12 +1,12 @@
 #!/bin/bash 
 
-cat $X509_CERT_DIR/INDEX.txt | grep Repository | grep software-itb &>/dev/null
+cat $1/osg/etc/config.ini | grep group  | grep = | grep ITB &> /dev/null
 if [ $? -eq 0 ]; then
   echo "ITB";
 else
   echo "OSG"
 fi
-indextype=`cat $X509_CERT_DIR/INDEX.txt | grep IndexTypeVersion | awk '{print $3}'`
+indextype=`cat $1/globus/TRUSTED_CA/INDEX.txt | grep IndexTypeVersion | awk '{print $3}'`
 if [ "$indextype" == "" ]; then
   echo "0"
 else

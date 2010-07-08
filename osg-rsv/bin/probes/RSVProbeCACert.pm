@@ -1403,10 +1403,10 @@ sub Check_Local_CA{
     #Check if the file CA cers are installed from ITB
     my $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
     if (!$o{'localCE'}){
-        $cmd = "-s  $ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        $cmd = "-s  $ca_version_script \"$o{'REMOTE_ENV'}{'OSG_LOCATION'}\" 2>/dev/null";
         &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
     }else{
-        $cmd = "$ca_version_script \"$o{'certDir'}\" 2>/dev/null";
+        $cmd = "$ca_version_script \"$o{'VDT_LOCATION_LOCAL'}\" 2>/dev/null";
         &RSVProbeBase::Run_Command ($cmd, "backtick");
     }
     @contents = split /\n/, $o{'cmdOut'};
