@@ -2,12 +2,16 @@
 
 # Standard libraries
 import os
+import re
 import sys
+import utils
 import ConfigParser
 from pwd import getpwnam
 
 # RSV libraries
 import rsv
+
+import pdb
 
 def set_defaults(config, options):
     """ This is where to declare defaults for config knobs.
@@ -43,6 +47,60 @@ def set_defaults(config, options):
 
 
 
+def load_config(config, options, rsv_loc):
+    """ Load all configuration files:
+    Load RSV configuration
+    Load metric global configuration
+    Load host-specific metric configuration
+    """
+
+    # Load the default values
+    rsv.log("Loading default configuration settings:", 3, 0)
+    set_defaults(config, options)
+
+    rsv.log("Reading configuration files:", 2, 0)
+
+    conf_files = []
+
+    # The global RSV configuration file
+    conf_files.append([os.path.join(rsv_loc, "etc", "rsv.conf"), 1])
+    # The metric-specific config file
+    conf_files.append([os.path.join(rsv_loc, "etc", "metrics", options.metric + ".conf"), 1])
+    # The host specific config file
+    conf_files.append([os.path.join(rsv_loc, "etc", "metrics", options.uri, options.metric + ".conf"), 0])
+
+    for tuple in conf_files:
+        load_config_file(config, tuple[0], required=tuple[1])
+
+    #
+    # Validate the configuration file
+    #
+    validate(config, options)
+
+    return
+
+
+
+def load_config_file(config, config_file, required):
+    """ Parse a configuration file in INI form. """
+    
+    rsv.log("reading configuration file " + config_file, 2, 4)
+
+    if not os.path.exists(config_file):
+        if required:
+            rsv.log("ERROR: missing required configuration file '%s'" % config_file, 1)
+            sys.exit(1)
+        else:
+            rsv.log("configuration file does not exist " + config_file, 2, 4)
+            return
+
+    # todo - add some error catching here
+    config.read(config_file)
+
+    return
+
+
+
 
 def validate(config, options):
     """ Perform validation on config values """
@@ -54,7 +112,7 @@ def validate(config, options):
     try:
         user = config.get("rsv", "user")
     except ConfigParser.NoOptionError:
-        rsv.log("ERROR: 'user' is missing in rsv.conf.  Set this value to your RSV user", 1)
+        rsv.log("ERROR: 'user' is missing in rsv.conf.  Set this value to your RSV user", 1, 4)
         sys.exit(1)
 
     try:
@@ -62,21 +120,9 @@ def validate(config, options):
     except KeyError:
         rsv.log("ERROR: The '%s' user defined in rsv.conf does not exist" % user, 1, 4)
         sys.exit(1)
-        
-    this_process_uid = os.getuid()
-    if this_process_uid == desired_uid:
-        rsv.log("Invoked as the RSV user (%s)" % user, 2, 4)
-    else:
-        if this_process_uid == 0:
-            rsv.log("Invoked as root.  Switching to '%s' user (uid: %s - gid: %s)" %
-                    (user, desired_uid, desired_gid), 2, 4)
-            os.setgid(desired_gid)
-            os.setuid(desired_uid)
-        else:
-            rsv.log("You can only run metrics as root or the RSV user (%s)." %
-                    user, 1, 0)
-            sys.exit(1)
 
+    # If appropriate, switch UID/GID
+    utils.switch_user(user, desired_uid, desired_gid)
 
                 
     #
@@ -132,5 +178,50 @@ def validate(config, options):
                 "This is likely caused by a missing or corrupt metric configuration file", 1, 0)
         sys.exit(1)
 
+
+    # 
+    # Check the desired output format
+    #
+    try:
+        output_format = config.get(options.metric, "output-format").lower()
+        if output_format != "wlcg" and output_format != "brief":
+            rsv.log("ERROR: output-format can only be set to 'wlcg' or 'brief' (val: %s)\n" %
+                    output_format, 1, 0)
+            sys.exit(1)
+                    
+    except ConfigParser.NoOptionError:
+        rsv.log("ERROR: desired output-format is missing.\n" +
+                "This is likely caused by a missing or corrupt metric configuration file", 1, 0)
+        sys.exit(1)
+
+    #
+    # Handle environment section
+    #
+    try:
+        section = options.metric + " env"
+        for var in config.options(section):
+            setting = config.get(section, var)
+            if setting.find("|") == -1:
+                rsv.log("ERROR: invalid environment config setting in section '%s'" +
+                        "Invalid entry: %s = %s\n" +
+                        "Format must be VAR = ACTION | VALUE\n" % (section, var, setting), 1, 0)
+                sys.exit(1)
+                
+            else:
+                (action, value) = re.split("\s*\|\s*", setting, 1)
+                valid_actions = ["SET", "UNSET", "APPEND", "PREPEND"]
+                if action.upper() in ("SET", "UNSET", "APPEND", "PREPEND"):
+                    # todo - This might not be necessary - we should replace it during configuration
+                    value = re.sub("!!VDT_LOCATION!!", options.vdt_location, value)
+                    config.set(section, var, [action, value])
+                else:
+                    rsv.log("ERROR: invalid environment config setting in section '%s'" +
+                            "Invalid entry: %s = %s\n" +
+                            "Format must be VAR = ACTION | VALUE\n" +
+                            "ACTION must be one of: %s" %
+                            (section, var, setting, " ".join(valid_actions)), 1, 0)
+
+    except ConfigParser.NoSectionError:
+        rsv.log("No environment section in metric configuration", 2, 4)
     
     return config

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import rsv
 import signal
 from time import strftime, gmtime
 
@@ -79,3 +80,23 @@ def timestamp(local=False):
         return strftime("%Y-%m-%d %H:%M:%S %Z")
     else:
         return strftime("%Y-%m-%dT%H:%M:%SZ", gmtime())
+
+
+def switch_user(user, desired_uid, desired_gid):
+    """ If the current process is not set as the desired UID, set it now.  If we are not
+    root then bail out """
+
+    this_process_uid = os.getuid()
+    if this_process_uid == desired_uid:
+        rsv.log("Invoked as the RSV user (%s)" % user, 2, 4)
+    else:
+        if this_process_uid == 0:
+            rsv.log("Invoked as root.  Switching to '%s' user (uid: %s - gid: %s)" %
+                    (user, desired_uid, desired_gid), 2, 4)
+            # todo - catch permissions exception here?
+            os.setgid(desired_gid)
+            os.setuid(desired_uid)
+        else:
+            rsv.log("You can only run metrics as root or the RSV user (%s)." % user, 1, 0)
+            sys.exit(1)
+

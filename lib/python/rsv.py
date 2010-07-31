@@ -28,9 +28,17 @@ OPENSSL_EXE = "/usr/bin/openssl"
 def initialize():
     """ Handle the command line, load configuration files and do other basic
     error checking that is not metric specific """
-    
+
+    # Make the config parser case sensitive
+    CONFIG.optionxform = str
+
     process_arguments()
-    load_config()
+
+    conf.load_config(CONFIG, OPTIONS, RSV_LOC)
+
+    # Share the CONFIG with results so that we do not need to always pass it
+    results.CONFIG = CONFIG
+    
     check_proxy()
 
     return
@@ -117,72 +125,6 @@ def process_arguments():
 
 
 
-def load_config():
-    """ Load all configuration files:
-    Load RSV configuration
-    Load metric global configuration
-    Load host-specific metric configuration
-    """
-
-    # Load the default values
-    log("Loading default configuration settings:", 3, 0)
-    conf.set_defaults(CONFIG, OPTIONS)
-
-    log("Reading configuration files:", 2, 0)
-
-    #
-    # Load the global RSV configuration file
-    #
-    global_conf_file = os.path.join(RSV_LOC, "etc", "rsv.conf")
-    load_config_file(global_conf_file, required=1)
-
-    #
-    # Load configuration specific to the metric
-    #
-    metric_conf_file = os.path.join(RSV_LOC, "etc", "metrics",
-                                    OPTIONS.metric + ".conf")
-    load_config_file(metric_conf_file, required=1)
-    
-    #
-    # Load configuration specific to the metric/host combination
-    #
-    metric_host_conf_file = os.path.join(RSV_LOC, "etc", "metrics", OPTIONS.uri,
-                                         OPTIONS.metric + ".conf")
-    load_config_file(metric_host_conf_file, required=0)
-
-    #
-    # Validate the configuration file
-    #
-    conf.validate(CONFIG, OPTIONS)
-
-    #
-    # Share config with the functions in results
-    #
-    results.CONFIG = CONFIG
-
-    return
-
-
-
-def load_config_file(config_file, required):
-    """ Parse a configuration file in INI form. """
-    
-    log("reading configuration file " + config_file, 2, 4)
-
-    if not os.path.exists(config_file):
-        if required:
-            log("ERROR: missing required configuration file '%s'" % config_file, 1)
-            sys.exit(1)
-        else:
-            log("configuration file does not exist " + config_file, 2)
-            return
-
-    # todo - add some error catching here
-    CONFIG.read(config_file)
-
-    return
-
-
 
 def ping_test():
     """ Ping the remote host to make sure it's alive before we attempt
@@ -200,6 +142,7 @@ def ping_test():
         
     log("Ping successful", 2, 4)
     return
+
 
 
 
@@ -333,16 +276,49 @@ def execute_job():
     except ConfigParser.NoOptionError:
         fatal("ej1: jobmanager or job_timeout not defined in config")
 
+    #
     # Build the custom parameters to the script
-    params_section = OPTIONS.metric + " params"
+    #
+    args_section = OPTIONS.metric + " args"
     args = ""
     try:
-        for option in CONFIG.options(params_section):
-            args += "--%s %s " % (option, CONFIG.get(params_section, option))
+        for option in CONFIG.options(args_section):
+            args += "--%s %s " % (option, CONFIG.get(args_section, option))
     except ConfigParser.NoSectionError:
-        log("No '%s' section found" % params_section, 2, 0)
+        log("No '%s' section found" % args_section, 2, 0)
     
 
+    #
+    # Set the environment for the job
+    #
+    log("Setting up job environment:", 2, 0)
+    original_environment = os.environ.copy()
+
+    section = OPTIONS.metric + " env"
+    for var in CONFIG.options(section):
+        (action, value) = CONFIG.get(section, var)
+        log("Var: '%s' Action: '%s' Value: '%s'" % (var, action, value), 3, 4)
+        if action.upper() == "APPEND":
+            if var in os.environ:
+                os.environ[var] = os.environ[var] + ":" + value
+            else:
+                os.environ[var] = value
+        elif action.upper() == "PREPEND":
+            if var in os.environ:
+                os.environ[var] = value + ":" + os.environ[var]
+            else:
+                os.environ[var] = value
+        elif action.upper() == "SET":
+            os.environ[var] = value
+        elif action.upper() == "UNSET":
+            if var in os.environ:
+                del os.environ[var]
+
+
+
+    #
+    # Build the command line for the job
+    #
     if config_val(OPTIONS.metric, "execute", "local"):
         job = "%s -m %s -u %s %s" % (OPTIONS.executable,
                                      OPTIONS.metric,
@@ -364,16 +340,26 @@ def execute_job():
 
     (ret, out) = utils.system_with_timeout(job, job_timeout)
 
-    # (None, None) will be returned on a timeout.  This could maybe be improved by throwing
-    # an exception?  My knowledge of Python is weak here.
+
+    #
+    # Restore the environment
+    # 
+    os.environ = original_environment
+
+
+    #
+    # Handle the output
+    #
+
+    # todo - (None, None) will be returned on a timeout.  This could maybe be improved
+    # by throwing an exception?  My knowledge of Python is weak here.
     if ret == None and out == None:
         results.job_timed_out(job, job_timeout)
         
     if ret:
-        if config_val("rsv", "execute", "local"):
-            results.local_job_failed(job, out)
-        elif config_val("rsv", "execute", "remote"):
+        if config_val(OPTIONS.metric, "execute", "remote"):
             results.remote_job_failed(job, out)
+        results.local_job_failed(job, out)
         
     parse_job_output(out)
 
@@ -386,7 +372,7 @@ def config_val(section, key, value, case_sensitive=0):
 
     try:
         if case_sensitive == 0:
-            if CONFIG.get(section, key).lower() == str(value).lower():
+             if CONFIG.get(section, key).lower() == str(value).lower():
                 return True
         else:
             if CONFIG.get(section, key) == str(value):
@@ -398,7 +384,8 @@ def config_val(section, key, value, case_sensitive=0):
 
 
 def fatal(msg=None):
-    """ For bad errors that we don't know the cause of """
+    """ For critical errors that we don't know the cause of - such as a value not being
+    in the configuration that we thought we had a default for. """
 
     output  = "ERROR: An unexpected internal error has occurred.  "
     output += "Please re-run this script with -v3 and send the output to the developer."
