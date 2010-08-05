@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 
-# A wrapper script that run-rsv-metric redirects to.  It will drive the
-# rest of the process.
+# This script just exists because I don't currently know a better way to load
+# Python scripts.
 
 import rsv
+rsv.main()
 
-rsv.initialize()
-
-rsv.ping_test()
-
-rsv.execute_job()

@@ -96,6 +96,10 @@ def switch_user(user, desired_uid, desired_gid):
             # todo - catch permissions exception here?
             os.setgid(desired_gid)
             os.setuid(desired_uid)
+            os.environ["USER"]     = user
+            os.environ["USERNAME"] = user
+            os.environ["LOGNAME"]  = user
+            
         else:
             rsv.log("You can only run metrics as root or the RSV user (%s)." % user, 1, 0)
             sys.exit(1)

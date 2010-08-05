@@ -24,22 +24,20 @@ RSV_LOC = None
 
 OPENSSL_EXE = "/usr/bin/openssl"
 
-
-def initialize():
-    """ Handle the command line, load configuration files and do other basic
-    error checking that is not metric specific """
-
-    # Make the config parser case sensitive
-    CONFIG.optionxform = str
+def main():
+    """ Main subroutine: directs program flow """
 
     process_arguments()
 
-    conf.load_config(CONFIG, OPTIONS, RSV_LOC)
+    conf.load_config()
 
-    # Share the CONFIG with results so that we do not need to always pass it
-    results.CONFIG = CONFIG
-    
     check_proxy()
+
+    pdb.set_trace()
+
+    ping_test()
+    
+    execute_job()
 
     return
 
@@ -104,7 +102,6 @@ def process_arguments():
     # Set RSV_LOC as a shortcut for using in other code
     global RSV_LOC
     RSV_LOC = os.path.join(OPTIONS.vdt_location, "osg-rsv")
-    results.RSV_LOC = RSV_LOC
 
     if not OPTIONS.metric:
         parser.error("You must provide a metric to run")
@@ -116,10 +113,6 @@ def process_arguments():
 
     if not OPTIONS.uri:
         parser.error("You must provide a URI to test against")
-
-
-    # Share options with the functions in results
-    results.OPTIONS = OPTIONS
 
     return
 
@@ -136,7 +129,7 @@ def ping_test():
     # the remote host, we don't care about the latency unless it exceeds the timeout
     (ret, out) = utils.system("/bin/ping -W 3 -c 1 " + OPTIONS.uri)
 
-    # If we can't ping the host, it's CRITICAL
+    # If we can't ping the host, don't bother doing anything else
     if ret:
         results.ping_failure(out)
         
@@ -239,6 +232,19 @@ def check_user_proxy(proxy_file):
 
 def parse_job_output(output):
     """ Parse the job output from the worker script """
+
+    if(config_val(OPTIONS.metric, "output-format", "wlcg")):
+        parse_job_output_wlcg(output)
+    elif(config_val(OPTIONS.metric, "output-format", "brief")):
+        parse_job_output_brief(output)
+    else:
+        log("ERROR: output format unknown", 1)
+        
+
+def parse_job_output_wlcg(output):
+    results.print_wlcg_result(output)
+
+def parse_job_output_brief(output):
 
     status = None
     details = None

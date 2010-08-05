@@ -13,28 +13,28 @@ import rsv
 
 import pdb
 
-def set_defaults(config, options):
+def set_defaults():
     """ This is where to declare defaults for config knobs.
     Any defaults should have a comment explaining them.
     """
     
-    config.add_section("rsv")
-    config.add_section(options.metric)
+    rsv.CONFIG.add_section("rsv")
+    rsv.CONFIG.add_section(rsv.OPTIONS.metric)
 
     def set_default_value(section, key, val):
         """ Set an individual item """
-        config.set(section, key, val)
+        rsv.CONFIG.set(section, key, val)
         rsv.log("Setting default '%s=%s'" % (key, val), 3, 4)
 
 
     # We want remote jobs to execute on the CE headnode, so they need to use
     # the fork jobmanager.
-    set_default_value(options.metric, "jobmanager", "fork")
+    set_default_value(rsv.OPTIONS.metric, "jobmanager", "fork")
 
     # The only metricType that any current metric has is "status".  So instead
     # of declaring it in every single <metric>.conf file, we'll set it here but
     # still make it possible to configure in case it is needed in the future.
-    set_default_value(options.metric, "metric-type", "status")
+    set_default_value(rsv.OPTIONS.metric, "metric-type", "status")
 
     # Just in case the details data returned is enormous, we'll set the default
     # to trim it down to in bytes.  A value of 0 means no trimming.
@@ -47,41 +47,44 @@ def set_defaults(config, options):
 
 
 
-def load_config(config, options, rsv_loc):
+def load_config():
     """ Load all configuration files:
     Load RSV configuration
     Load metric global configuration
     Load host-specific metric configuration
     """
 
+    # Make the config parser case sensitive
+    rsv.CONFIG.optionxform = str
+
     # Load the default values
     rsv.log("Loading default configuration settings:", 3, 0)
-    set_defaults(config, options)
+    set_defaults()
 
     rsv.log("Reading configuration files:", 2, 0)
 
     conf_files = []
 
     # The global RSV configuration file
-    conf_files.append([os.path.join(rsv_loc, "etc", "rsv.conf"), 1])
+    conf_files.append([os.path.join(rsv.RSV_LOC, "etc", "rsv.conf"), 1])
     # The metric-specific config file
-    conf_files.append([os.path.join(rsv_loc, "etc", "metrics", options.metric + ".conf"), 1])
+    conf_files.append([os.path.join(rsv.RSV_LOC, "etc", "metrics", rsv.OPTIONS.metric + ".conf"), 1])
     # The host specific config file
-    conf_files.append([os.path.join(rsv_loc, "etc", "metrics", options.uri, options.metric + ".conf"), 0])
+    conf_files.append([os.path.join(rsv.RSV_LOC, "etc", "metrics", rsv.OPTIONS.uri, rsv.OPTIONS.metric + ".conf"), 0])
 
     for tuple in conf_files:
-        load_config_file(config, tuple[0], required=tuple[1])
+        load_config_file(tuple[0], required=tuple[1])
 
     #
     # Validate the configuration file
     #
-    validate(config, options)
+    validate()
 
     return
 
 
 
-def load_config_file(config, config_file, required):
+def load_config_file(config_file, required):
     """ Parse a configuration file in INI form. """
     
     rsv.log("reading configuration file " + config_file, 2, 4)
@@ -95,14 +98,14 @@ def load_config_file(config, config_file, required):
             return
 
     # todo - add some error catching here
-    config.read(config_file)
+    rsv.CONFIG.read(config_file)
 
     return
 
 
 
 
-def validate(config, options):
+def validate():
     """ Perform validation on config values """
 
     #
@@ -110,7 +113,7 @@ def validate(config, options):
     #
     rsv.log("Validating user:", 2)
     try:
-        user = config.get("rsv", "user")
+        user = rsv.CONFIG.get("rsv", "user")
     except ConfigParser.NoOptionError:
         rsv.log("ERROR: 'user' is missing in rsv.conf.  Set this value to your RSV user", 1, 4)
         sys.exit(1)
@@ -130,13 +133,13 @@ def validate(config, options):
     # in a splice
     #
     try:
-        config.getint("rsv", "details_data_trim_length")
+        rsv.CONFIG.getint("rsv", "details_data_trim_length")
     except ConfigParser.NoOptionError:
         # We set a default for this, but just to be safe...
-        config.set("rsv", "details_data_trim_length", "10000")
+        rsv.CONFIG.set("rsv", "details_data_trim_length", "10000")
     except ValueError:
         rsv.log("ERROR: details_data_trim_length must be an integer.  It is set to '%s'"
-                % config.get("rsv", "details_data_trim_length"), 1)
+                % rsv.CONFIG.get("rsv", "details_data_trim_length"), 1)
         sys.exit(1)
 
 
@@ -144,13 +147,13 @@ def validate(config, options):
     # job_timeout must be an integer because we will use it later in an alarm call
     #
     try:
-        config.getint("rsv", "job_timeout")
+        rsv.CONFIG.getint("rsv", "job_timeout")
     except ConfigParser.NoOptionError:
         # We set a default for this, but just to be safe...
-        config.set("rsv", "job_timeout", "300")
+        rsv.CONFIG.set("rsv", "job_timeout", "300")
     except ValueError:
         rsv.log("ERROR: job_timeout must be an integer.  It is set to '%s'" %
-                config.get(options.metric, "job_timeout"), 1)
+                rsv.CONFIG.get(rsv.OPTIONS.metric, "job_timeout"), 1)
         sys.exit(1)
 
 
@@ -158,10 +161,10 @@ def validate(config, options):
     # warn if consumers are missing
     #
     try:
-        consumers = config.get("rsv", "consumers")
+        consumers = rsv.CONFIG.get("rsv", "consumers")
         rsv.log("Registered consumers: %s" % consumers, 2, 0)
     except ConfigParser.NoOptionError:
-        config.set("rsv", "consumers", "")
+        rsv.CONFIG.set("rsv", "consumers", "")
         rsv.log("WARNING: no consumers are registered in rsv.conf.  This means that\n" +
                 "records will not be sent to a central collector for availability\n" +
                 "statistics.", 1)
@@ -171,8 +174,8 @@ def validate(config, options):
     # check vital configuration for the job
     #
     try:
-        config.get(options.metric, "service-type")
-        config.get(options.metric, "execute")
+        rsv.CONFIG.get(rsv.OPTIONS.metric, "service-type")
+        rsv.CONFIG.get(rsv.OPTIONS.metric, "execute")
     except ConfigParser.NoOptionError:
         rsv.log("ERROR: metric configuration is missing 'service-type' or 'execute' declaration.\n" +
                 "This is likely caused by a missing or corrupt metric configuration file", 1, 0)
@@ -183,7 +186,7 @@ def validate(config, options):
     # Check the desired output format
     #
     try:
-        output_format = config.get(options.metric, "output-format").lower()
+        output_format = rsv.CONFIG.get(rsv.OPTIONS.metric, "output-format").lower()
         if output_format != "wlcg" and output_format != "brief":
             rsv.log("ERROR: output-format can only be set to 'wlcg' or 'brief' (val: %s)\n" %
                     output_format, 1, 0)
@@ -198,9 +201,9 @@ def validate(config, options):
     # Handle environment section
     #
     try:
-        section = options.metric + " env"
-        for var in config.options(section):
-            setting = config.get(section, var)
+        section = rsv.OPTIONS.metric + " env"
+        for var in rsv.CONFIG.options(section):
+            setting = rsv.CONFIG.get(section, var)
             if setting.find("|") == -1:
                 rsv.log("ERROR: invalid environment config setting in section '%s'" +
                         "Invalid entry: %s = %s\n" +
@@ -212,8 +215,8 @@ def validate(config, options):
                 valid_actions = ["SET", "UNSET", "APPEND", "PREPEND"]
                 if action.upper() in ("SET", "UNSET", "APPEND", "PREPEND"):
                     # todo - This might not be necessary - we should replace it during configuration
-                    value = re.sub("!!VDT_LOCATION!!", options.vdt_location, value)
-                    config.set(section, var, [action, value])
+                    value = re.sub("!!VDT_LOCATION!!", rsv.OPTIONS.vdt_location, value)
+                    rsv.CONFIG.set(section, var, [action, value])
                 else:
                     rsv.log("ERROR: invalid environment config setting in section '%s'" +
                             "Invalid entry: %s = %s\n" +
@@ -224,4 +227,4 @@ def validate(config, options):
     except ConfigParser.NoSectionError:
         rsv.log("No environment section in metric configuration", 2, 4)
     
-    return config
+    return

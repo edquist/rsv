@@ -15,9 +15,9 @@ import utils
 # todo -remove before release
 import pdb
 
-OPTIONS = None
-CONFIG  = None
-RSV_LOC = None
+
+def print_wlcg_result():
+    pass
 
 def print_result(status, data):
     """ Print the result to all consumers """
@@ -26,7 +26,7 @@ def print_result(status, data):
     # Trim the data appropriately based on details-data-trim-length.
     # A value of 0 means do not trim it.
     #
-    trim_length = CONFIG.get("rsv", "details-data-trim-length")
+    trim_length = rsv.CONFIG.get("rsv", "details-data-trim-length")
     if trim_length > 0:
         rsv.log("Trimming data to %s bytes because details-data-trim-length is set" %
                 trim_length, 2)
@@ -37,16 +37,17 @@ def print_result(status, data):
     #
     utc_timestamp   = utils.timestamp()
     local_timestamp = utils.timestamp(local=True)
-
+    
     this_host = socket.getfqdn()
-
+    
     utc_summary   = get_summary(status, this_host, utc_timestamp,   data)
     local_summary = get_summary(status, this_host, local_timestamp, data)
+
     
     #
     # Create a record for each consumer
     #
-    for consumer in re.split("\s*,\s*", CONFIG.get("rsv", "consumers")):
+    for consumer in re.split("\s*,\s*", rsv.CONFIG.get("rsv", "consumers")):
         if not consumer.isspace():
             create_consumer_record(consumer, utc_summary, local_summary)
 
@@ -57,7 +58,9 @@ def print_result(status, data):
     rsv.log(local_summary, 1)
 
     #
-    # enhance - should we have different exit codes based on status?
+    # enhance - should we have different exit codes based on status?  I think
+    # that just running a probe successfully should be a 0 exit status, but
+    # maybe there should be a different mode?
     #
     rsv.clean_up()
     sys.exit(0)
@@ -70,17 +73,17 @@ def get_summary(status, this_host, timestamp, data):
     """
 
     try:
-        metric_type  = CONFIG.get(OPTIONS.metric, "metric-type")
-        service_type = CONFIG.get(OPTIONS.metric, "service-type")
+        metric_type  = rsv.CONFIG.get(rsv.OPTIONS.metric, "metric-type")
+        service_type = rsv.CONFIG.get(rsv.OPTIONS.metric, "service-type")
     except ConfigParser.NoOptionError:
         rsv.fatal("gs1: metric-type or service-type not defined in config")
 
-    result  = "metricName: %s\n"   % OPTIONS.metric
+    result  = "metricName: %s\n"   % rsv.OPTIONS.metric
     result += "metricType: %s\n"   % metric_type
     result += "timestamp: %s\n"    % timestamp
     result += "metricStatus: %s\n" % status
     result += "serviceType: %s\n"  % service_type
-    result += "serviceURI: %s\n"   % OPTIONS.uri
+    result += "serviceURI: %s\n"   % rsv.OPTIONS.uri
     result += "gatheredAt: %s\n"   % this_host
     result += "summaryData: %s\n"  % status
     result += "detailsData: %s\n"  % data
@@ -94,12 +97,12 @@ def create_consumer_record(consumer, utc_summary, local_summary):
     """ Make a file in the consumer records area """
 
     # Check/create the directory that we'll put record into
-    output_dir = os.path.join(RSV_LOC, "output", consumer)
+    output_dir = os.path.join(rsv.RSV_LOC, "output", consumer)
 
     if not validate_directory(output_dir):
         rsv.log("WARNING: Cannot write record for consumer '%s'" % consumer, 1, 0)
     else:
-        prefix = OPTIONS.metric + "."
+        prefix = rsv.OPTIONS.metric + "."
         (file_handle, file_path) = tempfile.mkstemp(prefix=prefix, dir=output_dir)
 
         # todo - allow for consumer config files that specify which time to use
