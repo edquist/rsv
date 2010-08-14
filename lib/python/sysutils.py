@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+# Global libraries
 import os
-import rsv
 import signal
-from time import strftime, gmtime
+
+
+
 
 class TimeoutError(Exception):
     """ This defines an Exception that we can use if our system call times out """
@@ -64,43 +66,46 @@ def system(command):
     return (err, data)
 
 
-def timestamp(local=False):
-    """ When generating timestamps, we want to use UTC when communicating with
-    the remote collector.  For example:
-      2010-07-25T05:18:14Z
 
-    However, it's nice to print a more readable time for the local display, for
-    example:
-      2010-07-25 00:18:14 CDT
-
-    This is consistent with RSVv3
-    """
-    
-    if local:
-        return strftime("%Y-%m-%d %H:%M:%S %Z")
-    else:
-        return strftime("%Y-%m-%dT%H:%M:%SZ", gmtime())
-
-
-def switch_user(user, desired_uid, desired_gid):
+def switch_user(rsv, user, desired_uid, desired_gid):
     """ If the current process is not set as the desired UID, set it now.  If we are not
     root then bail out """
 
     this_process_uid = os.getuid()
     if this_process_uid == desired_uid:
-        rsv.log("Invoked as the RSV user (%s)" % user, 2, 4)
+        rsv.log("INFO", "Invoked as the RSV user (%s)" % user, 4)
     else:
         if this_process_uid == 0:
-            rsv.log("Invoked as root.  Switching to '%s' user (uid: %s - gid: %s)" %
-                    (user, desired_uid, desired_gid), 2, 4)
-            # todo - catch permissions exception here?
-            os.setgid(desired_gid)
-            os.setuid(desired_uid)
-            os.environ["USER"]     = user
-            os.environ["USERNAME"] = user
-            os.environ["LOGNAME"]  = user
+            rsv.log("INFO", "Invoked as root.  Switching to '%s' user (uid: %s - gid: %s)" %
+                    (user, desired_uid, desired_gid), 4)
+
+            try:
+                os.setgid(desired_gid)
+                os.setuid(desired_uid)
+                os.environ["USER"]     = user
+                os.environ["USERNAME"] = user
+                os.environ["LOGNAME"]  = user
+            except OSError:
+                rsv.log("ERROR", "Unable to switch to '%s' user (uid: %s - gid: %s)" %
+                        (user, desired_uid, desired_gid), 4)
             
         else:
-            rsv.log("You can only run metrics as root or the RSV user (%s)." % user, 1, 0)
+            # Todo - allow any user to run, but don't produce consumer records
+            rsv.log("ERROR", "You can only run metrics as root or the RSV user (%s)." % user, 0)
             sys.exit(1)
 
+
+
+_cached_host_name = None
+def getLocalHostName():
+    """ Return the host name of this machine """
+    
+    global _cached_host_name
+    
+    if not _cached_host_name:
+        try:
+            _cached_host_name = os.environ.get('HOSTNAME', socket.gethostname())
+        except:
+            _cached_host_name = 'localhost'
+            
+    return _cached_host_name
