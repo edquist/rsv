@@ -266,7 +266,7 @@ def check_user_proxy(rsv, metric, proxy_file):
 
 
 
-def ping_test(rsv, options):
+def ping_test(rsv, metric, options):
     """ Ping the remote host to make sure it's alive before we attempt
     to run jobs """
 
@@ -319,10 +319,10 @@ def parse_job_output_brief(rsv, metric, output):
         rsv.log("ERROR", "invalid data returned from job.")
 
         # We want to display the trimmed output, unless we're in full verbose mode
-        if OPTIONS.verbose != 0 and OPTIONS.verbose < 3:
+        if not rsv.quiet and OPTIONS.verbose < 3:
             trim_length = rsv.config.get("rsv", "details-data-trim-length")
             rsv.log("Displaying first %s bytes of output (use -v3 for full output)" %
-                trim_length, 1)
+                    trim_length, 1)
             output = output[:trim_length]
         else:
             rsv.log("DEBUG", "Displaying full output received from command:")
@@ -499,7 +499,7 @@ def main_run_rsv_metric():
 
     # Check for some basic error conditions
     check_proxy(rsv, metric)
-    ping_test(rsv, options)
+    ping_test(rsv, metric, options)
 
     # Run the job and parse the result
     execute_job(rsv, metric)

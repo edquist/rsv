@@ -51,6 +51,8 @@ def process_options(arguments=None):
                       help="Enable metric. May be specified multiple times.")
     parser.add_option("--disable", action="store_true", dest="rsvctrl_disable", default=False,
                       help="Disable metric. May be specified multiple times.")
+    parser.add_option("--host", dest="host", default=None,
+                      help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
 
     if arguments == None:
         (options, args) = parser.parse_args()

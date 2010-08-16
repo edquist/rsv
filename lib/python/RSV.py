@@ -10,6 +10,7 @@ import logging
 import ConfigParser
 
 # RSV libraries
+import Host
 import Metric
 
 import pdb
@@ -70,8 +71,11 @@ class RSV:
                 self.log("INFO", "configuration file does not exist '%s'" % config_file, 4)
                 return
 
-        # todo - add some error catching here
-        self.config.read(config_file)
+        try:
+            self.config.read(config_file)
+        except ConfigParser.ParsingError, err:
+            self.log("CRITICAL", err)
+            sys.exit(1)
 
         return
 
@@ -90,8 +94,9 @@ class RSV:
                     metrics.append(file)
             return metrics
         except OSError:
+            # todo - check for permission problem
             self.log("ERROR", "The metrics directory does not exist (%s)" % metrics_dir)
-            pass
+            return []
 
 
         
@@ -101,6 +106,36 @@ class RSV:
         dict = {}
         for metric in self.get_installed_metrics():
             dict[metric] = Metric.Metric(metric, self)
+
+        return dict
+
+
+
+    def get_hosts(self):
+        """ Return a list of hosts that have configuration files """
+
+        conf_dir = os.path.join(self.rsv_location, "etc")
+        try:
+            files = os.listdir(conf_dir)
+            hosts = []
+            for file in files:
+                # Somewhat arbitrary pattern, but it won't match '.', '..', or '.svn'
+                if re.search("\.conf$", file) and file != "rsv.conf":
+                    host = re.sub("\.conf$", "", file)
+                    hosts.append(host)
+            return hosts
+        except OSError:
+            # todo - check for permission problem
+            self.log("ERROR", "The conf directory does not exist (%s)" % conf_dir)
+
+
+
+    def get_host_info(self):
+        """ Return a dictionary with host configuration """
+
+        dict = {}
+        for host in self.get_hosts():
+            dict[host] = Host.Host(host, self)
 
         return dict
 

@@ -49,7 +49,12 @@ class Metric:
             self.rsv.log("ERROR", "Metric config file '%s' does not exist" % file)
             return
         else:
-            self.config.read(file)
+            try:
+                self.config.read(file)
+            except ConfigParser.ParsingError, err:
+                self.rsv.log("CRITICAL", err)
+                sys.exit(1)
+
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
@@ -57,14 +62,19 @@ class Metric:
             if not os.path.exists(file):
                 self.rsv.log("INFO", "Metric/host config file '%s' does not exist" % file)
             else:
-                self.config.read(file)
+                try:
+                    self.config.read(file)
+                except ConfigParser.ParsingError, err:
+                    self.rsv.log("CRITICAL", err)
+                    sys.exit(1)
+
         
 
     def get_type(self):
         """ Return the serviceType """
 
         try:
-            return config.get(self.name, "service-type")
+            return self.config.get(self.name, "service-type")
         except ConfigParser.NoOptionError:
             self.rsv.log("ERROR", "Metric '%s' missing serviceType" % self.name)
             return "UNKNOWN"
