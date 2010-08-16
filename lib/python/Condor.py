@@ -1,0 +1,249 @@
+#!/usr/bin/env python
+
+import os
+import commands
+
+class Condor:
+    """
+    Define the interface to condor-cron
+    """
+
+    rsv = None
+    condor_cron_bin_dir = None
+
+    def __init__(self, rsv):
+        self.rsv = rsv
+        self.condor_cron_bin_dir = os.path.join(rsv.vdt_location, "condor-cron", "wrappers")
+
+
+    def is_condor_running(self):
+        """
+        Determine if Condor-Cron is running.  Return True is so, false otherwise
+        """
+
+        condor_cron_q_exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_q")
+        (ret, out) = self.commands_getstatusoutput(condor_cron_q_exe)
+
+        if not ret and out.index("-- Submitter") != -1:
+            self.rsv.log("DEBUG", "Condor is running.  Output of condor_cron_q:\n%s" % out)
+            return True
+
+        self.rsv.log("INFO", "Condor-Cron does not seem to be running.  Output of condor_cron_q:\n%s" % out)
+
+        return False
+
+
+    def is_metric_running(self, metric):
+        """
+        Return true if a metric is running in Condor-Cron
+        Return false if it is not
+        """
+
+        condor_id = metric.get_unique_name()
+        classads = self.get_classads(constraint = "OSGRSVUniqueName==\"%s\"" % condor_id)
+
+        if classads == None:
+            self.rsv.log("ERROR", "Could not determine if job is running")
+            return False
+
+        for classad in classads:
+            # We put the attribute into the classad in quotes, so search for it accordingly
+            if classad["OSGRSVUniqueName"] == '"' + condor_id + '"':
+                return True
+
+        return False
+
+
+    def get_classads(self, constraint=None):
+        """
+        Run a condor_cron_q command and return a dict of the classad.
+        If there is an error, return None
+        """
+        if constraint:
+            self.rsv.log("DEBUG", "Getting Condor classads with constraint '%s'" % constraint)
+        else:
+            self.rsv.log("DEBUG", "Getting Condor classads with no constraint")
+
+        if not self.is_condor_running():
+            self.rsv.log("ERROR", "Cannot fetch classads because Condor-Cron is not running")
+            return None
+
+        # Build the command
+        exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_q")
+        cmd = "%s -l" % exe
+        if constraint != None:
+            cmd += " -constraint '%s'" % constraint
+
+        (ret, out) = self.commands_getstatusoutput(cmd);
+
+        # Run the command and parse the classad
+        if ret != 0:
+            self.rsv.log("ERROR", "Command returned error code '%i': '%s'" % (ret, cmd))
+            return None
+        else:
+            return self.parse_classads(out)
+
+
+    def start_condor_job(self, metric, host):
+        """
+        Start a single condor-cron job.
+        Takes a Metric and Host object as input.
+        """
+        
+        self.rsv.log("INFO", "Submitting job to condor: metric '%s' - host '%s'" %
+                     (metric.name, metric.host))
+
+        # Make sure that the metric is enabled
+        if not host.metric_enabled(metric.name):
+            self.rsv.log("ERROR", "The metric '%s' is not enabled on host '%s'." +
+                         "It must be enabled before turning it on." % (metric.name, host.host))
+            return False
+
+        # Check if the metric is already running in condor_cron
+        if self.is_metric_running(metric):
+            self.rsv.log("INFO", "Metric '%s' is already running against host '%s'" %
+                         (metric.metric, host.host))
+            return True
+
+        # Generate a submission file
+        submit_file_contents = self.build_metric_submit_file(metric)
+        condor_id = metric.get_unique_name()
+        sub_file_name = os.path.join(self.rsv.rsv_location, "submissions", condor_id + ".sub")
+
+        try:
+            fh = open(sub_file_name, 'w')
+            fh.write(submit_file_contents)
+            fh.close()
+        except IOError, err:
+            self.rsv.log("ERROR", "Cannot write temporary submission file '%s'." % sub_file_name)
+            self.rsv.log("ERROR", "Error message: %s" % err)
+            return False
+
+        # Submit the job and remove the file
+        exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_submit")
+        cmd = "%s %s" % (exe, sub_file_name)
+        raw_ec, out = self.commands_getstatusoutput(cmd, self.rsv.get_user())
+        exit_code = os.WEXITSTATUS(raw_ec)
+        self.rsv.log("INFO", "Condor submission: %s" % out)
+        self.rsv.log("DEBUG", "Condor submission completed: %s (%s)" % (exit_code, raw_ec))
+        os.remove(sub_file_name)
+
+        if exit_code != 0:
+            self.rsv.log("ERROR", "Problem submitting job to condor-cron.  Command output:\n%s" %
+                         out)
+            return False
+
+        return True
+
+
+    def stop_condor_jobs(self, constraint):
+        """
+        Stop the probes with the supplied constraint
+        return True if jobs are stopped successfully, False otherwise
+        """
+
+        self.rsv.log("INFO", "Stopping all metrics with constraint '%s'" % constraint)
+
+        if not self.is_condor_running():
+            self.rsv.log("ERROR", "Cannot stop jobs because Condor-Cron is not running")
+            return False
+
+        # Check if any jobs are running to be removed
+        jobs = self.get_classads(constraint=constraint)
+        if len(jobs) == 0:
+            self.rsv.log("INFO", "No jobs to be removed with constraint '%s'" % constraint)
+            return True
+
+        # Build the command
+        cmd = os.path.join(self.condor_cron_bin_dir, "condor_cron_rm")
+        if constraint != None:
+            cmd += " -constraint \"%s\"" % constraint
+
+        (ret, out) = self.commands_getstatusoutput(cmd);
+
+        if ret != 0:
+            self.rsv.log("ERROR", "Command returned error code '%i': '%s'" % (ret, cmd))
+            return False
+
+        return True
+
+
+
+    def build_metric_submit_file(self, metric):
+        """
+        Create a submission file for a metric
+        """
+        log_dir = self.rsv.get_metric_log_dir()
+
+        # TODO: Do I need to add the current PERL5LIB?  I think so, but how do I know it is valid?
+
+        # todo - form environment using config definitions
+        environment = ""
+        environment += "PATH=/usr/bin:/bin;"
+        #environment += "PERL5LIB=%s;" % perl_lib_dirs
+        environment += "VDT_LOCATION=%s\n" % self.rsv.vdt_location
+
+        cron = metric.get_cron_entry()
+
+        condor_id = metric.get_unique_name()
+
+        submit = ""
+        submit += "######################################################################\n"
+        submit += "# Temporary submit file generated by rsv-control\n"
+        submit += "# Generated at %s " % "PUT TIME HERE"
+        submit += "######################################################################\n"
+        submit += "Environment = %s\n"    % environment
+        submit += "CronPrepTime = 180\n"
+        submit += "CronWindow = 99999999\n"
+        submit += "CronMonth = %s\n"      % cron["Month"]
+        submit += "CronDayOfWeek = %s\n"  % cron["DayOfWeek"]
+        submit += "CronDayOfMonth = %s\n" % cron["DayOfMonth"]
+        submit += "CronHour = %s\n"       % cron["Hour"]
+        submit += "CronMinute = %s\n"     % cron["Minute"]
+        submit += "Executable = %s\n"     % metric.executable
+        submit += "Error = %s/%s.err\n"   % (log_dir, condor_id)
+        submit += "Output = %s/%s.out\n"  % (log_dir, condor_id)
+        submit += "Log = %s/%s.log\n"     % (log_dir, condor_id)
+        submit += "Arguments = %s\n"      % metric.get_args_string()
+        submit += "Universe = local\n"
+        submit += "Notification = never\n"
+        submit += "OnExitRemove = false\n"
+        submit += "PeriodicRelease = HoldReasonCode =!= 1\n"
+        submit += "+OSGRSV = \"probes\"\n"
+        submit += "OSGRSVUniqueName = %s\n" % condor_id
+        submit += "Queue\n"
+        
+        return submit
+
+
+
+    def commands_getstatusoutput(self, command, user=None):
+        """Run a command in a subshell using commands module and setting up the environment"""
+        self.rsv.log("DEBUG", "commands_getstatusoutput: command='%s' user='%s'" % (command, user))
+
+        if user:
+            command = 'su -c "%s" %s' % (command, user)
+        ec, out = commands.getstatusoutput(command)
+        return ec, out
+
+
+    def parse_classads(self, output):
+        """
+        Parse a set of condor classads in "attribute = value" format
+        A blank line will be between each classad
+        Return an array of hashes
+        """
+        classads = []
+        tmp = {}
+        for line in output.split("\n"):
+            # A blank line signifies that this classad is finished
+            if line == "":
+                if len(tmp) > 0:
+                    classads.append(tmp)
+                    tmp = {}
+
+            pair = line.split(" = ", 2)
+            if len(pair) == 2:
+                tmp[pair[0]] = pair[1]
+
+        return classads

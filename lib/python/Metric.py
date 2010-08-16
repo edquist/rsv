@@ -13,7 +13,8 @@ class Metric:
     conf_dir = None
     executable = None
 
-    def __init__(self, metric, rsv, defaults=None, host=None):
+
+    def __init__(self, metric, rsv, host=None):
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
@@ -28,6 +29,8 @@ class Metric:
         if host:
             self.host = host
 
+        # Load configuration
+        defaults = get_metric_defaults(metric)
         self.config = ConfigParser.RawConfigParser()
         self.config.optionxform = str
         self.load_config(defaults)
@@ -149,3 +152,47 @@ class Metric:
             self.rsv.log("INFO", "No '%s' section found" % args_section, 4)
 
         return args
+
+
+    def get_unique_name(self):
+        if self.host:
+            return "%s__%s" % (self.host, self.name)
+        else:
+            self.rsv.log("CRITICAL", "Attempted to get unique name for metric without host")
+            return None
+
+
+    def get_cron_entry(self):
+        try:
+            arr = self.config.get(self.name, "cron-interval").split()
+            dict = {}
+            dict["Minute"]     = arr[0]
+            dict["Hour"]       = arr[1]
+            dict["DayOfMonth"] = arr[2]
+            dict["Month"]      = arr[3]
+            dict["DayOfWeek"]  = arr[4]
+            return dict
+        except ConfigParser.NoOptionError:
+            self.rsv.log("ERROR", "cron-interval missing from metric")
+            return {}
+
+
+
+def get_metric_defaults(metric_name):
+    """ Load metric default values """
+    defaults = {}
+    def set_default_value(section, option, value):
+        if section not in defaults:
+            defaults[section] = {}
+        defaults[section][option] = value
+
+    # We want most remote Globus jobs to execute on the CE headnode, so they
+    # need to use the fork jobmanager (unless they declare something different)
+    set_default_value(metric_name, "jobmanager", "fork")
+
+    # The only metricType that any current metric has is "status".  So instead
+    # of declaring it in every single <metric>.conf file, we'll set it here but
+    # still make it possible to configure in case it is needed in the future.
+    set_default_value(metric_name, "metric-type", "status")
+
+    return defaults

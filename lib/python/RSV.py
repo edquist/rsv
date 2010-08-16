@@ -43,9 +43,11 @@ class RSV:
         # Setup the initial configuration
         self.config = ConfigParser.RawConfigParser()
         self.config.optionxform = str
+        self.setup_config()
 
 
-    def setup_config(self, defaults=None):
+    def setup_config(self):
+        defaults = get_rsv_defaults()
         if defaults:
             for section in defaults.keys():
                 if not self.config.has_section(section):
@@ -181,9 +183,45 @@ class RSV:
             selg.logger.warning(message)
 
 
+    def get_metric_log_dir(self):
+        return os.path.join(self.rsv_location, "logs", "metrics")
+
+    def get_consumer_log_dir(self):
+        return os.path.join(self.rsv_location, "logs", "consumers")
+
+    def get_user(self):
+        try:
+            return self.config.get("rsv", "user")
+        except:
+            self.log("ERROR", "'user' not defined in rsv.conf")
+            return ""
+
 # End of RSV class
 
 
 def get_osg_location():
     """ Find the path to OSG root directory """
     return os.environ.get("OSG_LOCATION", os.environ.get("VDT_LOCATION", ""))
+
+
+def get_rsv_defaults():
+    """
+    This is where to declare defaults for config knobs.
+    Any defaults should have a comment explaining them.
+    """
+
+    defaults = {}
+
+    def set_default_value(section, option, value):
+        if section not in defaults:
+            defaults[section] = {}
+        defaults[section][option] = value
+
+    # Just in case the details data returned is enormous, we'll set the default
+    # to trim it down to in bytes.  A value of 0 means no trimming.
+    set_default_value("rsv", "details-data-trim-length", 10000)
+
+    # Set the job timeout default in seconds
+    set_default_value("rsv", "job-timeout", 300)
+
+    return defaults

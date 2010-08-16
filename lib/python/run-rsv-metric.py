@@ -426,53 +426,6 @@ def execute_job(rsv, metric):
     return
 
 
-def rsv_defaults(rsv):
-    """
-    This is where to declare defaults for config knobs.
-    Any defaults should have a comment explaining them.
-    """
-
-    defaults = {}
-
-    def set_default_value(section, option, value):
-        if section not in defaults:
-            defaults[section] = {}
-        defaults[section][option] = value
-
-    # Just in case the details data returned is enormous, we'll set the default
-    # to trim it down to in bytes.  A value of 0 means no trimming.
-    set_default_value("rsv", "details-data-trim-length", 10000)
-
-    # Set the job timeout default in seconds
-    set_default_value("rsv", "job-timeout", 300)
-
-    return defaults
-
-
-def metric_defaults(rsv, metric_name):
-    """
-    This is where to declare defaults for metric config knobs.
-    Any defaults should have a comment explaining them.
-    """
-
-    defaults = {}
-
-    def set_default_value(section, option, value):
-        if section not in defaults:
-            defaults[section] = {}
-        defaults[section][option] = value
-
-    # We want most remote Globus jobs to execute on the CE headnode, so they
-    # need to use the fork jobmanager (unless they declare something different)
-    set_default_value(metric_name, "jobmanager", "fork")
-
-    # The only metricType that any current metric has is "status".  So instead
-    # of declaring it in every single <metric>.conf file, we'll set it here but
-    # still make it possible to configure in case it is needed in the future.
-    set_default_value(metric_name, "metric-type", "status")
-
-    return defaults
-
 
 def clean_up(exit=0):
     """ This will always be called before exiting.  Clean up any temporary
@@ -487,14 +440,8 @@ def main_run_rsv_metric():
 
     # Process the command line and initialize
     options = process_arguments()
-
     rsv = RSV.RSV(options.vdt_location, options.verbose)
-    defaults = rsv_defaults(rsv)
-    rsv.setup_config(defaults)
-
-    # Load configuration files
-    defaults = metric_defaults(rsv, options.metric)
-    metric = Metric.Metric(options.metric, rsv, defaults, options.uri)
+    metric = Metric.Metric(options.metric, rsv, options.uri)
     validate_config(rsv, metric)
 
     # Check for some basic error conditions
