@@ -182,6 +182,17 @@ class RSV:
             self.logger.warning("Invalid level (%s) passed to RSV.log." % level)
             selg.logger.warning(message)
 
+    def echo(self, message, indent=0):
+
+        if self.quiet:
+            return
+        else:
+            if indent > 0:
+                message = " "*indent + message
+
+            print message
+        
+
 
     def get_metric_log_dir(self):
         return os.path.join(self.rsv_location, "logs", "metrics")
@@ -195,6 +206,25 @@ class RSV:
         except:
             self.log("ERROR", "'user' not defined in rsv.conf")
             return ""
+
+
+    def get_enabled_consumers(self):
+
+        
+        try:
+            consumers = []
+            for consumer in re.split("\s*,\s*", self.config.get("rsv", "consumers")):
+                if not consumer.isspace():
+                    consumers.append(consumer)
+            return consumers
+        except ConfigParser.NoOptionError:
+            self.log("WARNING", "No consumers defined in rsv.conf")
+            return []
+
+
+    def get_wrapper(self):
+        return os.path.join(self.rsv_location, "bin", "run-rsv-metric")
+
 
 # End of RSV class
 

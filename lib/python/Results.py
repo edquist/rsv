@@ -78,17 +78,14 @@ def print_result(rsv, metric, utc_summary, local_summary):
     #
     # Create a record for each consumer
     #
-    for consumer in re.split("\s*,\s*", rsv.config.get("rsv", "consumers")):
-        if not consumer.isspace():
-            create_consumer_record(rsv, metric, consumer, utc_summary, local_summary)
+    for consumer in rsv.get_enabled_consumers():
+        create_consumer_record(rsv, metric, consumer, utc_summary, local_summary)
 
     # 
     # Print the local summary to the screen
     #
     rsv.log("INFO", "\n\n") # separate final output from debug output
-
-    if rsv.quiet == 0:
-        print local_summary
+    rsv.echo(local_summary)
 
     #
     # enhance - should we have different exit codes based on status?  I think

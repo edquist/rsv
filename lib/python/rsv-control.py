@@ -101,9 +101,9 @@ def main_rsv_control():
         else:
             return rc_metric.list_metrics(rsv, options, args[0])
     elif options.on:
-        rc_metric.start(rsv, options.host, args)
+        return rc_metric.start(rsv, options.host, args)
     elif options.off:
-        rc_metric.stop(rsv, options.host, args)
+        return rc_metric.stop(rsv, options.host, args)
 
     
 if __name__ == "__main__":

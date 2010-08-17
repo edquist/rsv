@@ -11,8 +11,8 @@ from optparse import OptionParser
 # RSV libraries
 import RSV
 import Metric
-import results
-import sysutils
+import Results
+import Sysutils
 
 # todo - remove before releasing
 import pdb
@@ -94,7 +94,7 @@ def validate_config(rsv, metric):
         clean_up(1)
 
     # If appropriate, switch UID/GID
-    sysutils.switch_user(rsv, user, desired_uid, desired_gid)
+    Sysutils.switch_user(rsv, user, desired_uid, desired_gid)
 
                 
     #
@@ -201,7 +201,7 @@ def check_proxy(rsv, metric):
         pass
 
     # If we won't have a proxy, and need-proxy was not set above, we gotta bail
-    results.no_proxy_found(rsv, metric)
+    Results.no_proxy_found(rsv, metric)
 
 
 
@@ -212,7 +212,7 @@ def renew_service_certificate_proxy(rsv, cert, key, proxy):
 
     hours_til_expiry = 4
     seconds_til_expiry = hours_til_expiry * 60 * 60
-    (ret, out) = sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+    (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
                                  (OPENSSL_EXE, proxy, seconds_til_expiry))
     
     if ret == 0:
@@ -222,11 +222,11 @@ def renew_service_certificate_proxy(rsv, cert, key, proxy):
             hours_til_expiry, 4)
 
         grid_proxy_init_exe = os.path.join(rsv.vdt_location, "globus", "bin", "grid-proxy-init")
-        (ret, out) = sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
+        (ret, out) = Sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
                                      (grid_proxy_init_exe, cert, key, proxy))
 
         if ret:
-            results.service_proxy_renewal_failed(rsv, metric, cert, key, proxy, out)
+            Results.service_proxy_renewal_failed(rsv, metric, cert, key, proxy, out)
 
     # Globus needs help finding the service proxy since it probably does not have the
     # default naming scheme of /tmp/x509_u<UID>
@@ -246,17 +246,17 @@ def check_user_proxy(rsv, metric, proxy_file):
     
     # Check that the file exists on disk
     if not os.path.exists(proxy_file):
-        results.missing_user_proxy(rsv, metric, proxy_file)
+        Results.missing_user_proxy(rsv, metric, proxy_file)
 
     # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
     # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
     # so this check might need to be adjusted if that behavior is more understood.
     minutes_til_expiration = 10
     seconds_til_expiration = minutes_til_expiration * 60
-    (ret, out) = sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+    (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
                                  (OPENSSL_EXE, proxy_file, seconds_til_expiration))
     if ret:
-        results.expired_user_proxy(rsv, metric, proxy_file, out, minutes_til_expiration)
+        Results.expired_user_proxy(rsv, metric, proxy_file, out, minutes_til_expiration)
 
     # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
     os.environ["X509_USER_PROXY"] = proxy_file
@@ -274,11 +274,11 @@ def ping_test(rsv, metric, options):
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
-    (ret, out) = sysutils.system("/bin/ping -W 3 -c 1 " + options.host)
+    (ret, out) = Sysutils.system("/bin/ping -W 3 -c 1 " + options.host)
 
     # If we can't ping the host, don't bother doing anything else
     if ret:
-        results.ping_failure(rsv, metric, out)
+        Results.ping_failure(rsv, metric, out)
         
     rsv.log("INFO", "Ping successful", 4)
     return
@@ -298,7 +298,7 @@ def parse_job_output(rsv, metric, output):
         
 
 def parse_job_output_wlcg(rsv, metric, output):
-    results.wlcg_result(rsv, metric, output)
+    Results.wlcg_result(rsv, metric, output)
 
 
 
@@ -314,7 +314,7 @@ def parse_job_output_brief(rsv, metric, output):
         details = "\n".join(lines[2:])
 
     if status and details:
-        results.brief_result(rsv, metric, status, details)
+        Results.brief_result(rsv, metric, status, details)
     else:
         rsv.log("ERROR", "invalid data returned from job.")
 
@@ -397,7 +397,7 @@ def execute_job(rsv, metric):
 
     rsv.log("INFO", "Running command '%s'" % job)
 
-    (ret, out) = sysutils.system_with_timeout(job, job_timeout)
+    (ret, out) = Sysutils.system_with_timeout(job, job_timeout)
 
 
     #
@@ -413,13 +413,13 @@ def execute_job(rsv, metric):
     # todo - (None, None) will be returned on a timeout.  This could maybe be improved
     # by throwing an exception?  My knowledge of Python is weak here.
     if ret == None and out == None:
-        results.job_timed_out(rsv, metric, job, job_timeout)
+        Results.job_timed_out(rsv, metric, job, job_timeout)
         
     if ret:
         if metric.config_val("execute", "local"):
-            results.local_job_failed(rsv, metric, job, out)
+            Results.local_job_failed(rsv, metric, job, out)
         elif metric.config_val("execute", "remote-globus"):
-            results.remote_globus_job_failed(rsv, metric, job, out)
+            Results.remote_globus_job_failed(rsv, metric, job, out)
         
     parse_job_output(rsv, metric, out)
 

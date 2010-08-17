@@ -7,6 +7,7 @@ import Host
 import Table
 import Condor
 import Metric
+import Consumer
 
 def new_table(header, options):
     table_ = Table.Table((58, 20))
@@ -108,15 +109,26 @@ def start(rsv, hostname=None, metrics=None):
 
     if not condor.is_condor_running():
         rsv.log("CRITICAL", "condor-cron is not running.  Cannot start RSV jobs")
-        sys.exit(1)
+        return False
 
-    if len(metrics) == 0:
+    if not metrics:
+        errors = 0
         for host in rsv.get_host_info().values():
             for metric_name in host.get_enabled_metrics():
                 metric = Metric.Metric(metric_name, rsv, host.host)
-                condor.start_condor_job(metric, host)
+                if not condor.start_metric(metric, host):
+                    errors += 1
 
-        # todo - start consumers
+        for consumer_name in rsv.get_enabled_consumers():
+            consumer = Consumer.Consumer(consumer_name, rsv)
+            if not condor.start_consumer(consumer):
+                errors += 1
+
+        if errors > 0:
+            return False
+
+        return True
+        
     else:
         if not host:
             rsv.log("ERROR", "When starting specific metrics you must also specify a host.")
@@ -136,14 +148,17 @@ def stop(rsv, host, metrics):
         sys.exit(1)
 
     if len(metrics) == 0:
-        print "Stopping all metrics on all hosts"
-        if not condor.stop_condor_jobs('OSGRSV==\"probes\"'):
+        rsv.echo("Stopping all metrics on all hosts")
+        if not condor.stop_condor_jobs("OSGRSV==\"metrics\""):
             rsv.log("ERROR", "Problem stopping metrics.")
-
-        print "Stopping consumers"
-        if not condor.stop_condor_jobs('OSGRSV==\"consumers\"'):
+            return False
+            
+        rsv.echo("Stopping consumers")
+        if not condor.stop_condor_jobs("OSGRSV==\"consumers\""):
             rsv.log("ERROR", "Problem stopping consumers.")
             return False
+
+        return True
         
     else:
         if not host:
