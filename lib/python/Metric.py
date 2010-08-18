@@ -6,6 +6,8 @@ import sys
 import ConfigParser
 
 class Metric:
+    """ Instantiable class to read and store configuration for a single metric """
+
     rsv = None
     name = None
     host = None
@@ -37,7 +39,7 @@ class Metric:
 
 
     def load_config(self, defaults):
-
+        """ Load metric configuration files """
         if defaults:
             for section in defaults.keys():
                 if not self.config.has_section(section):
@@ -47,13 +49,13 @@ class Metric:
                     self.config.set(section, item, defaults[section][item])
 
         # Load the metric's general configuration file
-        file = os.path.join(self.conf_dir, self.name + ".conf")
-        if not os.path.exists(file):
-            self.rsv.log("ERROR", "Metric config file '%s' does not exist" % file)
+        config_file = os.path.join(self.conf_dir, self.name + ".conf")
+        if not os.path.exists(config_file):
+            self.rsv.log("ERROR", "Metric config file '%s' does not exist" % config_file)
             return
         else:
             try:
-                self.config.read(file)
+                self.config.read(config_file)
             except ConfigParser.ParsingError, err:
                 self.rsv.log("CRITICAL", err)
                 sys.exit(1)
@@ -61,12 +63,12 @@ class Metric:
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
-            file = os.path.join(self.conf_dir, self.host, self.name + ".conf")
-            if not os.path.exists(file):
-                self.rsv.log("INFO", "Metric/host config file '%s' does not exist" % file)
+            config_file = os.path.join(self.conf_dir, self.host, self.name + ".conf")
+            if not os.path.exists(config_file):
+                self.rsv.log("INFO", "Metric/host config file '%s' does not exist" % config_file)
             else:
                 try:
-                    self.config.read(file)
+                    self.config.read(config_file)
                 except ConfigParser.ParsingError, err:
                     self.rsv.log("CRITICAL", err)
                     sys.exit(1)
@@ -84,6 +86,7 @@ class Metric:
 
 
     def config_get(self, key):
+        """ Fetch a value from the metric configuration """
         try:
             return self.config.get(self.name, key)
         except ConfigParser.NoOptionError:
@@ -155,6 +158,7 @@ class Metric:
 
 
     def get_unique_name(self):
+        """ Return a unique ID to be used in Condor based on the metric and host """
         if self.host:
             return "%s__%s" % (self.host, self.name)
         else:
@@ -163,15 +167,16 @@ class Metric:
 
 
     def get_cron_entry(self):
+        """ Return a dict containing the cron time information """
         try:
             arr = self.config.get(self.name, "cron-interval").split()
-            dict = {}
-            dict["Minute"]     = arr[0]
-            dict["Hour"]       = arr[1]
-            dict["DayOfMonth"] = arr[2]
-            dict["Month"]      = arr[3]
-            dict["DayOfWeek"]  = arr[4]
-            return dict
+            cron = {}
+            cron["Minute"]     = arr[0]
+            cron["Hour"]       = arr[1]
+            cron["DayOfMonth"] = arr[2]
+            cron["Month"]      = arr[3]
+            cron["DayOfWeek"]  = arr[4]
+            return cron
         except ConfigParser.NoOptionError:
             self.rsv.log("ERROR", "cron-interval missing from metric")
             return {}

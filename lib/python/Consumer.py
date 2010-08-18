@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 import os
-import re
 import sys
 import ConfigParser
 
 class Consumer:
+    """ Instantiable class to read and store configuration about a single consumer """
+    
     rsv = None
     name = None
     config = None
@@ -33,7 +34,8 @@ class Consumer:
 
 
     def load_config(self, defaults):
-
+        """ Read the consumer configuration file, if it exists """
+        
         if defaults:
             for section in defaults.keys():
                 if not self.config.has_section(section):
@@ -43,20 +45,23 @@ class Consumer:
                     self.config.set(section, item, defaults[section][item])
 
         # Load the metric's general configuration file
-        file = os.path.join(self.conf_dir, self.name + ".conf")
-        if not os.path.exists(file):
-            self.rsv.log("INFO", "Consumer config file '%s' does not exist" % file)
+        config_file = os.path.join(self.conf_dir, self.name + ".conf")
+        if not os.path.exists(config_file):
+            self.rsv.log("INFO", "Consumer config file '%s' does not exist" % config_file)
             return
         else:
             try:
-                self.config.read(file)
+                self.config.read(config_file)
             except ConfigParser.ParsingError, err:
                 self.rsv.log("CRITICAL", err)
+                # TODO - return exception, don't exit
                 sys.exit(1)
 
 
 
     def config_get(self, key):
+        """ Get a value from the consumer-specific configuration """
+        
         try:
             return self.config.get(self.name, key)
         except ConfigParser.NoOptionError:
@@ -82,6 +87,7 @@ class Consumer:
 
 
     def get_unique_name(self):
+        """ Return a unique ID for this consumer to use in the Condor job ad """
         return self.name
 
 

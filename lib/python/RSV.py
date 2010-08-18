@@ -13,10 +13,13 @@ import ConfigParser
 import Host
 import Metric
 
-import pdb
 
 
 class RSV:
+    """ Class to load and store configuration information about this install
+    of RSV.  This could be replaced with a singleton pattern to reduce the need
+    to pass the instance around in functions. """
+    
     vdt_location = None
     rsv_location = None
     config = None
@@ -47,6 +50,7 @@ class RSV:
 
 
     def setup_config(self):
+        """ Load configuration """
         defaults = get_rsv_defaults()
         if defaults:
             for section in defaults.keys():
@@ -87,13 +91,13 @@ class RSV:
         """ Return a list of installed metrics """
         metrics_dir = os.path.join(self.rsv_location, "bin", "metrics")
         try:
-            files = os.listdir(metrics_dir)
-            files.sort()
+            config_files = os.listdir(metrics_dir)
+            config_files.sort()
             metrics = []
-            for file in files:
+            for config_file in config_files:
                 # Somewhat arbitrary pattern, but it won't match '.', '..', or '.svn'
-                if re.search("\w\.\w", file):
-                    metrics.append(file)
+                if re.search("\w\.\w", config_file):
+                    metrics.append(config_file)
             return metrics
         except OSError:
             # todo - check for permission problem
@@ -105,11 +109,11 @@ class RSV:
     def get_metric_info(self):
         """ Return a dictionary with information about each installed metric """
 
-        dict = {}
+        metrics = {}
         for metric in self.get_installed_metrics():
-            dict[metric] = Metric.Metric(metric, self)
+            metrics[metric] = Metric.Metric(metric, self)
 
-        return dict
+        return metrics
 
 
 
@@ -118,12 +122,12 @@ class RSV:
 
         conf_dir = os.path.join(self.rsv_location, "etc")
         try:
-            files = os.listdir(conf_dir)
+            config_files = os.listdir(conf_dir)
             hosts = []
-            for file in files:
+            for config_file in config_files:
                 # Somewhat arbitrary pattern, but it won't match '.', '..', or '.svn'
-                if re.search("\.conf$", file) and file != "rsv.conf":
-                    host = re.sub("\.conf$", "", file)
+                if re.search("\.conf$", config_file) and config_file != "rsv.conf":
+                    host = re.sub("\.conf$", "", config_file)
                     hosts.append(host)
             return hosts
         except OSError:
@@ -133,17 +137,18 @@ class RSV:
 
 
     def get_host_info(self):
-        """ Return a dictionary with host configuration """
+        """ Return a list containing one Host instance for each configured host """
 
-        dict = {}
+        hosts = []
         for host in self.get_hosts():
-            dict[host] = Host.Host(host, self)
+            hosts.append(Host.Host(host, self))
 
-        return dict
+        return hosts
 
 
 
     def init_logging(self, verbosity):
+        """ Initialize the logger """
 
         logger = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter("%(levelname)s: %(message)s")
@@ -162,7 +167,7 @@ class RSV:
 
 
     def log(self, level, message, indent=0):
-
+        """ Interface to logger """
         level = level.lower()
 
         if indent > 0:
@@ -180,10 +185,11 @@ class RSV:
             self.logger.critical(message)
         else:
             self.logger.warning("Invalid level (%s) passed to RSV.log." % level)
-            selg.logger.warning(message)
+            self.logger.warning(message)
 
     def echo(self, message, indent=0):
-
+        """ Print a message unless verbosity level==0 (quiet) """
+        
         if self.quiet:
             return
         else:
@@ -195,21 +201,24 @@ class RSV:
 
 
     def get_metric_log_dir(self):
+        """ Return the directory to store condor log/out/err files for metrics """
         return os.path.join(self.rsv_location, "logs", "metrics")
 
     def get_consumer_log_dir(self):
+        """ Return the directory to store condor log/out/err files for consumers """
         return os.path.join(self.rsv_location, "logs", "consumers")
 
     def get_user(self):
+        """ Return the user defined in rsv.conf """
         try:
             return self.config.get("rsv", "user")
-        except:
+        except ConfigParser.NoOptionError:
             self.log("ERROR", "'user' not defined in rsv.conf")
             return ""
 
 
     def get_enabled_consumers(self):
-
+        """ Return a list of all consumers enabled in rsv.conf """
         
         try:
             consumers = []
@@ -223,6 +232,7 @@ class RSV:
 
 
     def get_wrapper(self):
+        """ Return the wrapper script that will run the metrics """
         return os.path.join(self.rsv_location, "bin", "run-rsv-metric")
 
 

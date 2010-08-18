@@ -2,8 +2,8 @@
 
 # Global libraries
 import os
+import sys
 import signal
-
 
 
 
@@ -93,19 +93,3 @@ def switch_user(rsv, user, desired_uid, desired_gid):
             # Todo - allow any user to run, but don't produce consumer records
             rsv.log("ERROR", "You can only run metrics as root or the RSV user (%s)." % user, 0)
             sys.exit(1)
-
-
-
-_cached_host_name = None
-def getLocalHostName():
-    """ Return the host name of this machine """
-    
-    global _cached_host_name
-    
-    if not _cached_host_name:
-        try:
-            _cached_host_name = os.environ.get('HOSTNAME', socket.gethostname())
-        except:
-            _cached_host_name = 'localhost'
-            
-    return _cached_host_name

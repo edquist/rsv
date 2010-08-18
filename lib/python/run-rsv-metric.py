@@ -45,9 +45,7 @@ def process_arguments():
     #
     # Do error checking on the options supplied
     #
-    if options.vdt_location:
-        log("Using VDT_LOCATION supplied on command line", 1)
-    else:
+    if not options.vdt_location:
         options.vdt_location = RSV.get_osg_location()
 
     if not options.vdt_location:
@@ -186,7 +184,7 @@ def check_proxy(rsv, metric):
         service_cert  = rsv.config.get("rsv", "service-cert")
         service_key   = rsv.config.get("rsv", "service-key")
         service_proxy = rsv.config.get("rsv", "service-proxy")
-        renew_service_certificate_proxy(rsv, service_cert, service_key, service_proxy)
+        renew_service_certificate_proxy(rsv, metric, service_cert, service_key, service_proxy)
         return
     except ConfigParser.NoOptionError:
         rsv.log("INFO", "Not using service certificate.  Checking for user proxy", 4)
@@ -205,7 +203,7 @@ def check_proxy(rsv, metric):
 
 
 
-def renew_service_certificate_proxy(rsv, cert, key, proxy):
+def renew_service_certificate_proxy(rsv, metric, cert, key, proxy):
     """ Check the service certificate.  If it is expiring soon, renew it. """
 
     rsv.log("INFO", "Checking service certificate proxy:", 4)
@@ -216,10 +214,10 @@ def renew_service_certificate_proxy(rsv, cert, key, proxy):
                                  (OPENSSL_EXE, proxy, seconds_til_expiry))
     
     if ret == 0:
-        log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
+        rsv.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
     else:
-        log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
-            hours_til_expiry, 4)
+        rsv.log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
+                hours_til_expiry, 4)
 
         grid_proxy_init_exe = os.path.join(rsv.vdt_location, "globus", "bin", "grid-proxy-init")
         (ret, out) = Sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
@@ -298,11 +296,19 @@ def parse_job_output(rsv, metric, output):
         
 
 def parse_job_output_wlcg(rsv, metric, output):
+    """ Parse WLCG formatted output. """
     Results.wlcg_result(rsv, metric, output)
 
 
 
 def parse_job_output_brief(rsv, metric, output):
+    """ Parse the "brief" job output.  This format consists of just a keyword, status
+    and details.  Here is an example:
+    JOB RESULTS:
+    OK
+    More information, which can
+    be on multiple lines.
+    """
 
     status = None
     details = None
@@ -316,7 +322,7 @@ def parse_job_output_brief(rsv, metric, output):
     if status and details:
         Results.brief_result(rsv, metric, status, details)
     else:
-        rsv.log("ERROR", "invalid data returned from job.")
+        rsv.log("ERROR", "Data returned from job not in 'brief' format.")
 
         # We want to display the trimmed output, unless we're in full verbose mode
         if not rsv.quiet and OPTIONS.verbose < 3:
@@ -327,7 +333,7 @@ def parse_job_output_brief(rsv, metric, output):
         else:
             rsv.log("DEBUG", "Displaying full output received from command:")
             
-        log(output, 1)
+        rsv.echo(output)
         sys.exit(1)
 
 
@@ -427,7 +433,7 @@ def execute_job(rsv, metric):
 
 
 
-def clean_up(exit=0):
+def clean_up(exit_code=0):
     """ This will always be called before exiting.  Clean up any temporary
     files """
 
@@ -456,8 +462,8 @@ def main_run_rsv_metric():
 
 
 if __name__ == "__main__":
-    progname = os.path.basename(sys.argv[0])
-    if progname == 'run-rsv-metric' or progname == 'run-rsv-metric.py':
+    PROGNAME = os.path.basename(sys.argv[0])
+    if PROGNAME == 'run-rsv-metric' or PROGNAME == 'run-rsv-metric.py':
         if not main_run_rsv_metric():
             sys.exit(1)
         else:

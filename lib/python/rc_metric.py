@@ -3,13 +3,13 @@
 import re
 import sys
 
-import Host
 import Table
 import Condor
 import Metric
 import Consumer
 
 def new_table(header, options):
+    """ Return a new table with default dimensions """
     table_ = Table.Table((58, 20))
     if options.list_wide:
         table_.truncate = False
@@ -86,6 +86,7 @@ def list_metrics(rsv, options, pattern):
         tmp = ""
         if pattern:
             tmp = " that match the supplied pattern"
+
         retlines.append("The are %i metrics not enabled on any host%s.  Use --all to display them." %
                         (num_disabled_metrics, tmp))
             
@@ -113,7 +114,7 @@ def start(rsv, hostname=None, metrics=None):
 
     if not metrics:
         errors = 0
-        for host in rsv.get_host_info().values():
+        for host in rsv.get_host_info():
             for metric_name in host.get_enabled_metrics():
                 metric = Metric.Metric(metric_name, rsv, host.host)
                 if not condor.start_metric(metric, host):

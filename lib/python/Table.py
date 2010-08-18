@@ -145,7 +145,7 @@ class Table(object):
                 else:
                     strval.append(strval_par[-1])
         elif self.truncate:
-            increment=0
+            increment = 0
             for i in range(len(self.columns)-1):
                 if len(strval[i])+increment>=self.columns[i]:
                     strval[i] = strval[i][:(self.columns[i]-increment-4)]+"..."
@@ -159,7 +159,7 @@ class TableError(Exception):
     """Error in Table formatting: inconsistent options, line clash
     """
     def __init__(self, message):
-         self.message = message
+        self.message = message
          
     def __str__(self):
         return repr(self.message)

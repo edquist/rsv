@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import ConfigParser
 
 class Host:
+    """ Instantiable class to read and store configuration about a single host """
+
     rsv = None
     host = None
     config = None
@@ -23,15 +26,15 @@ class Host:
 
 
     def load_config(self):
+        """ Load host specific configuration file """
 
-        # Load the metric's general configuration file
-        file = os.path.join(self.conf_dir, self.host + ".conf")
-        if not os.path.exists(file):
-            self.rsv.log("ERROR", "Host config file '%s' does not exist" % file)
+        config_file = os.path.join(self.conf_dir, self.host + ".conf")
+        if not os.path.exists(config_file):
+            self.rsv.log("ERROR", "Host config file '%s' does not exist" % config_file)
             return
         else:
             try:
-                self.config.read(file)
+                self.config.read(config_file)
             except ConfigParser.ParsingError, err:
                 self.rsv.log("CRITICAL", err)
                 sys.exit(1)
@@ -51,7 +54,8 @@ class Host:
         
 
     def get_enabled_metrics(self):
-
+        """ Return a list of all metrics enabled to run against this host """
+        
         enabled_metrics = []
         try:
             for metric in self.config.options(self.host):

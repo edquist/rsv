@@ -2,9 +2,7 @@
 
 # System libraries
 import os 
-import re
 import sys
-import time
 from optparse import OptionParser
 
 # Custom RSV libraries
@@ -107,8 +105,8 @@ def main_rsv_control():
 
     
 if __name__ == "__main__":
-    progname = os.path.basename(sys.argv[0])
-    if progname == 'rsv-control' or progname == 'rsv-control.py':
+    PROGNAME = os.path.basename(sys.argv[0])
+    if PROGNAME == 'rsv-control' or PROGNAME == 'rsv-control.py':
         if not main_rsv_control():
             sys.exit(1)
         else:

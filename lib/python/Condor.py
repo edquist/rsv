@@ -3,12 +3,8 @@
 import os
 import commands
 
-import pdb
-
 class Condor:
-    """
-    Define the interface to condor-cron
-    """
+    """ Define the interface to condor-cron """
 
     rsv = None
     condor_cron_bin_dir = None
@@ -30,7 +26,8 @@ class Condor:
             self.rsv.log("DEBUG", "Condor is running.  Output of condor_cron_q:\n%s" % out)
             return True
 
-        self.rsv.log("INFO", "Condor-Cron does not seem to be running.  Output of condor_cron_q:\n%s" % out)
+        self.rsv.log("INFO", "Condor-Cron does not seem to be running.  " +
+                     "Output of condor_cron_q:\n%s" % out)
 
         return False
 
@@ -75,14 +72,14 @@ class Condor:
         if constraint != None:
             cmd += " -constraint '%s'" % constraint
 
-        (ret, out) = self.commands_getstatusoutput(cmd);
+        (ret, out) = self.commands_getstatusoutput(cmd)
 
         # Run the command and parse the classad
         if ret != 0:
             self.rsv.log("ERROR", "Command returned error code '%i': '%s'" % (ret, cmd))
             return None
         else:
-            return self.parse_classads(out)
+            return parse_classads(out)
 
 
     def start_metric(self, metric, host):
@@ -116,9 +113,7 @@ class Condor:
 
 
     def start_consumer(self, consumer):
-        """
-        Start a single consumer condor-cron job.
-        """
+        """ Start a single consumer condor-cron job. """
         
         self.rsv.log("INFO", "Submitting consumer job to condor: consumer '%s'" % consumer)
 
@@ -135,11 +130,16 @@ class Condor:
 
 
     def submit_condor_job(self, submit_file_contents, condor_id):
+        """
+        Input: submit file contents and job identifier
+        Create submission file, submits it to Condor and removes it
+        """
+
         try:
             sub_file_name = os.path.join(self.rsv.rsv_location, "submissions", condor_id + ".sub")
-            fh = open(sub_file_name, 'w')
-            fh.write(submit_file_contents)
-            fh.close()
+            file_handle = open(sub_file_name, 'w')
+            file_handle.write(submit_file_contents)
+            file_handle.close()
         except IOError, err:
             self.rsv.log("ERROR", "Cannot write temporary submission file '%s'." % sub_file_name)
             self.rsv.log("ERROR", "Error message: %s" % err)
@@ -185,10 +185,11 @@ class Condor:
         if constraint != None:
             cmd += " -constraint '%s'" % constraint
 
-        (ret, out) = self.commands_getstatusoutput(cmd);
+        (ret, out) = self.commands_getstatusoutput(cmd)
 
         if ret != 0:
-            self.rsv.log("ERROR", "Command returned error code '%i': '%s'" % (ret, cmd))
+            self.rsv.log("ERROR", "Command returned error code '%i': '%s'.  Output:\n%s" %
+                         (ret, cmd, out))
             return False
 
         return True
@@ -196,9 +197,7 @@ class Condor:
 
 
     def build_metric_submit_file(self, metric):
-        """
-        Create a submission file for a metric
-        """
+        """ Create a submission file for a metric """
         log_dir = self.rsv.get_metric_log_dir()
 
         # TODO: Do I need to add the current PERL5LIB?  I think so, but how do I know it is valid?
@@ -213,7 +212,7 @@ class Condor:
 
         condor_id = metric.get_unique_name()
 
-        arguments = metric.executable + " " + metric.get_args_string()
+        arguments = "-m %s -u %s" % (metric.name, metric.host)
 
         submit = ""
         submit += "######################################################################\n"
@@ -271,7 +270,8 @@ class Condor:
         submit += "Universe = local\n"
         submit += "Notification = never\n"
         submit += "OnExitRemove = false\n"
-        submit += "PeriodicRelease = (HoldReasonCode =!= 1) && ((CurrentTime - EnteredCurrentStatus) > 60)\n"
+        submit += "PeriodicRelease = (HoldReasonCode =!= 1) " + \
+                  "&& ((CurrentTime - EnteredCurrentStatus) > 60)\n"
         submit += "+OSGRSV = \"consumers\"\n"
         submit += "+OSGRSVUniqueName = \"%s\"\n" % condor_id
         submit += "Queue\n"
@@ -284,27 +284,29 @@ class Condor:
 
         if user:
             command = 'su -c "%s" %s' % (command, user)
-        ec, out = commands.getstatusoutput(command)
-        return ec, out
+
+        ret, out = commands.getstatusoutput(command)
+        return ret, out
 
 
-    def parse_classads(self, output):
-        """
-        Parse a set of condor classads in "attribute = value" format
-        A blank line will be between each classad
-        Return an array of hashes
-        """
-        classads = []
-        tmp = {}
-        for line in output.split("\n"):
-            # A blank line signifies that this classad is finished
-            if line == "":
-                if len(tmp) > 0:
-                    classads.append(tmp)
-                    tmp = {}
 
-            pair = line.split(" = ", 2)
-            if len(pair) == 2:
-                tmp[pair[0]] = pair[1]
+def parse_classads(output):
+    """
+    Parse a set of condor classads in "attribute = value" format
+    A blank line will be between each classad
+    Return an array of hashes
+    """
+    classads = []
+    tmp = {}
+    for line in output.split("\n"):
+        # A blank line signifies that this classad is finished
+        if line == "":
+            if len(tmp) > 0:
+                classads.append(tmp)
+                tmp = {}
 
-        return classads
+        pair = line.split(" = ", 2)
+        if len(pair) == 2:
+            tmp[pair[0]] = pair[1]
+
+    return classads

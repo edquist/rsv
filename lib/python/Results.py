@@ -2,15 +2,11 @@
 
 # Standard libraries
 import os
-import re
 import sys
 import socket
 import tempfile
 import ConfigParser
 from time import strftime, gmtime
-
-# todo -remove before release
-import pdb
 
 
 
@@ -34,16 +30,17 @@ def timestamp(local=False):
 
 
 def wlcg_result(rsv, metric, output):
+    """ Handle WLCG formatted output """
+    
+    # TODO - trim using details-data-trim-length
 
-    # todo - trim using details-data-trim-length
-
-    # todo - adjust timestamp
+    # TODO - adjust timestamp
 
     print_result(rsv, metric, output, output)
     
 
 def brief_result(rsv, metric, status, data):
-    """ Print the result to all consumers """
+    """ Handle the "brief" result output """
 
     rsv.log("DEBUG", "In brief_result()")
 
@@ -92,12 +89,12 @@ def print_result(rsv, metric, utc_summary, local_summary):
     # that just running a probe successfully should be a 0 exit status, but
     # maybe there should be a different mode?
     #
-    # todo - call clean_up?
+    # TODO - call clean_up?
     sys.exit(0)
 
 
 
-def get_summary(rsv, metric, status, this_host, timestamp, data):
+def get_summary(rsv, metric, status, this_host, time, data):
     """ Generate a summary string
     Currently metricStatus and summaryData are identical (per RSVv3)
     """
@@ -111,7 +108,7 @@ def get_summary(rsv, metric, status, this_host, timestamp, data):
 
     result  = "metricName: %s\n"   % metric.name
     result += "metricType: %s\n"   % metric_type
-    result += "timestamp: %s\n"    % timestamp
+    result += "timestamp: %s\n"    % time
     result += "metricStatus: %s\n" % status
     result += "serviceType: %s\n"  % service_type
     result += "serviceURI: %s\n"   % metric.host
@@ -136,7 +133,9 @@ def create_consumer_record(rsv, metric, consumer, utc_summary, local_summary):
         prefix = metric.name + "."
         (file_handle, file_path) = tempfile.mkstemp(prefix=prefix, dir=output_dir)
 
-        # todo - allow for consumer config files that specify which time to use
+        rsv.log("INFO", "Creating record for %s consumer at '%s'" % (consumer, file_path))
+
+        # TODO - allow for consumer config files that specify which time to use
         # for now we'll just give the html-consumer local time, and UTC to the rest
         if consumer == "html-consumer":
             os.write(file_handle, local_summary)
