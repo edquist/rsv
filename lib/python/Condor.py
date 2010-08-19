@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import re
+import time
 import commands
+from time import strftime
+
 
 class Condor:
     """ Define the interface to condor-cron """
@@ -287,6 +291,67 @@ class Condor:
 
         ret, out = commands.getstatusoutput(command)
         return ret, out
+
+
+    def display_jobs(self, hostname=None):
+        """ Create a nicely formatted list of RSV jobs running in Condor-Cron """
+
+        job_status = ["U", "I", "R", "X", "C", "H", "E"]
+
+        def display_metric(classad):
+            status = job_status[int(classad["JobStatus"])]
+
+            next_run_time = strftime("%m-%d %H:%M:%S", time.localtime(int(classad["DeferralTime"])))
+
+            match = re.search("-m ([\w.-]+)", classad["Args"])
+            metric = "UNKNOWN?"
+            if match:
+                metric = match.group(1)
+
+            owner = classad["Owner"].replace('"', "")
+
+            return "%5s.%-1s %-10s %-2s %-15s %-44s\n" % (classad["ClusterId"], classad["ProcId"],
+                                                          owner, status, next_run_time, metric)
+
+
+        #
+        # Build a table of jobs for each host
+        #
+        hosts = {}
+        classads = self.get_classads("OSGRSV==\"metrics\"")
+        for classad in classads:
+            match = re.search("-u ([\w.-]+)", classad["Args"])
+            host = "UNKNOWN?"
+            if match:
+                host = match.group(1)
+                if hostname and hostname != host:
+                    continue
+                
+                if host not in hosts:
+                    hosts[host] = "Hostname: %s\n" % host
+                    hosts[host] += "%7s %-10s %-2s %-15s %-44s\n" % \
+                                   ("ID", "OWNER", "ST", "NEXT RUN TIME", "METRIC")
+
+            hosts[host] += display_metric(classad)
+
+
+        self.rsv.echo("") # get a newline to separate output from command
+        for host in hosts:
+            self.rsv.echo(hosts[host])
+
+        #
+        # Show the consumers also if a specific hostname was not requested
+        #
+        if not hostname:
+            classads = self.get_classads("OSGRSV==\"consumers\"")
+            if classads:
+                self.rsv.echo("%7s %-10s %-2s %-30s" % ("ID", "OWNER", "ST", "CONSUMER"))
+            for classad in classads:
+                status = job_status[int(classad["JobStatus"])]
+                owner = classad["Owner"].replace('"', "")
+                consumer = classad["OSGRSVUniqueName"].replace('"', "")
+                self.rsv.echo("%5s.%-1s %-10s %-2s %-30s" % (classad["ClusterId"], classad["ProcId"],
+                                                             owner, status, consumer))
 
 
 

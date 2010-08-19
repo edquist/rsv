@@ -21,6 +21,7 @@ def process_options(arguments=None):
       --help | -h 
       --version
       --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern> ]
+      --job-list [ --host <host-name> ]
       --on      [METRIC ...]
       --off     [METRIC ...]
       --enable  [--user <user>] --host <host-name> METRIC [METRIC ...]
@@ -36,7 +37,11 @@ def process_options(arguments=None):
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
                       help="Verbosity level (0-3). [Default=%default]")
     parser.add_option("-l", "--list", action="store_true", dest="list", default=False,
-                      help="List metric information.  If <pattern> is supplied, only metrics matching the regular expression pattern will be displayed")
+                      help="List metric information.  If <pattern> is supplied, only metrics " +
+                      "matching the regular expression pattern will be displayed")
+    parser.add_option("-j", "--job-list", action="store_true", dest="job_list", default=False,
+                      help="List metrics/consumers running in condor-cron.  If host is specified " +
+                      "then only metrics from that host are displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
                       help="Wide list display to avoid truncation in metric listing")
     parser.add_option("--all", action="store_true", dest="list_all", default=False,
@@ -72,12 +77,12 @@ def process_options(arguments=None):
 
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.enable, options.disable, options.on,
-                                          options.off, options.list] if i])
+                                          options.off, options.list, options.job_list] if i])
     
     if number_of_commands > 1:
         parser.error("You can use only one of list, enable, disable, on, or off.")
     if number_of_commands == 0:
-        parser.error("Invalid syntax. You must specify one command.")
+        parser.error("You must specify one command.")
 
     return options, args
 
@@ -98,6 +103,8 @@ def main_rsv_control():
             return rc_metric.list_metrics(rsv, options, "")
         else:
             return rc_metric.list_metrics(rsv, options, args[0])
+    elif options.job_list:
+        rc_metric.job_list(rsv, options.host)
     elif options.on:
         return rc_metric.start(rsv, options.host, args)
     elif options.off:

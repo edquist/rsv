@@ -104,6 +104,15 @@ def list_metrics(rsv, options, pattern):
     return True
 
 
+def job_list(rsv, hostname=None):
+    """ Display jobs running similar to condor_cron_q but in a better format """
+    condor = Condor.Condor(rsv)
+
+    if condor.display_jobs(hostname):
+        return True
+    else:
+        return False
+
 
 def start(rsv, hostname=None, jobs=None):
     """ Start all metrics and consumers - or supplied set of them """
