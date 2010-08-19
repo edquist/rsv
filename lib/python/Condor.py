@@ -95,8 +95,8 @@ class Condor:
 
         # Make sure that the metric is enabled
         if not host.metric_enabled(metric.name):
-            self.rsv.log("ERROR", "The metric '%s' is not enabled on host '%s'." +
-                         "It must be enabled before turning it on." % (metric.name, host.host))
+            self.rsv.log("ERROR", "The metric '%s' is not enabled on host '%s'." %
+                         (metric.name, host.host))
             return False
 
         # Check if the metric is already running in condor_cron
@@ -109,7 +109,7 @@ class Condor:
         # Generate a submission file
         submit_file_contents = self.build_metric_submit_file(metric)
 
-        return self.submit_condor_job(submit_file_contents, condor_id)
+        return self.submit_job(submit_file_contents, condor_id)
 
 
     def start_consumer(self, consumer):
@@ -126,10 +126,10 @@ class Condor:
 
         # Generate a submission file
         submit_file_contents = self.build_consumer_submit_file(consumer)
-        return self.submit_condor_job(submit_file_contents, condor_id)
+        return self.submit_job(submit_file_contents, condor_id)
 
 
-    def submit_condor_job(self, submit_file_contents, condor_id):
+    def submit_job(self, submit_file_contents, condor_id):
         """
         Input: submit file contents and job identifier
         Create submission file, submits it to Condor and removes it
@@ -162,7 +162,7 @@ class Condor:
         return True
 
 
-    def stop_condor_jobs(self, constraint):
+    def stop_jobs(self, constraint):
         """
         Stop the jobs with the supplied constraint.
         Return True if jobs are stopped successfully, False otherwise

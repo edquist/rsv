@@ -3,10 +3,13 @@
 import re
 import sys
 
+import Host
 import Table
 import Condor
 import Metric
 import Consumer
+
+import pdb
 
 def new_table(header, options):
     """ Return a new table with default dimensions """
@@ -32,9 +35,8 @@ def list_metrics(rsv, options, pattern):
     used_metrics = {}
 
     # Form a table for each host listing enabled metrics
-    for hostname in hosts:
-        host = hosts[hostname]
-        table = new_table("Metrics running against host: %s" % hostname, options)
+    for host in hosts:
+        table = new_table("Metrics running against host: %s" % host.host, options)
 
         enabled_metrics = host.get_enabled_metrics()
 
@@ -54,9 +56,9 @@ def list_metrics(rsv, options, pattern):
 
         # We don't skip this host earlier in the loop so that we can get
         # a correct number for the disabled hosts.
-        if options.host and options.host != hostname:
+        if options.host and options.host != host.host:
             rsv.log("DEBUG", "Not displaying host '%s' because --host %s was supplied." %
-                    (hostname, options.host))
+                    (host.host, options.host))
             continue
 
         if not table.isBufferEmpty():
@@ -103,8 +105,8 @@ def list_metrics(rsv, options, pattern):
 
 
 
-def start(rsv, hostname=None, metrics=None):
-    """ Start all metrics - or supplied metrics """
+def start(rsv, hostname=None, jobs=None):
+    """ Start all metrics and consumers - or supplied set of them """
 
     condor = Condor.Condor(rsv)
 
@@ -112,34 +114,82 @@ def start(rsv, hostname=None, metrics=None):
         rsv.log("CRITICAL", "condor-cron is not running.  Cannot start RSV jobs")
         return False
 
-    if not metrics:
-        errors = 0
-        for host in rsv.get_host_info():
-            for metric_name in host.get_enabled_metrics():
-                metric = Metric.Metric(metric_name, rsv, host.host)
-                if not condor.start_metric(metric, host):
-                    errors += 1
+    # 
+    # If we are not passed specific jobs to start, start all metrics and consumers
+    #
+    if not jobs:
+        num_errors = 0
 
+        # Start all the metrics for each host
+        for host in rsv.get_host_info():
+            enabled_metrics = host.get_enabled_metrics()
+            if len(enabled_metrics) > 0:
+                rsv.echo("Starting %s metrics for host '%s'." % (len(enabled_metrics), host.host))
+                for metric_name in enabled_metrics:
+                    metric = Metric.Metric(metric_name, rsv, host.host)
+                    if not condor.start_metric(metric, host):
+                        num_errors += 1
+
+        # Start the consumers
+        rsv.echo("Starting consumers.")
         for consumer_name in rsv.get_enabled_consumers():
             consumer = Consumer.Consumer(consumer_name, rsv)
             if not condor.start_consumer(consumer):
-                errors += 1
+                num_errors += 1
 
-        if errors > 0:
+        if num_errors > 0:
             return False
 
         return True
-        
-    else:
-        if not host:
-            rsv.log("ERROR", "When starting specific metrics you must also specify a host.")
 
-        for metric in metrics:
-            rsv.log("INFO", "Starting metric %s" % metric)
-            # todo - start single metric!
+    #
+    # Start only the specified set of metrics / consumers
+    #
+    else:
+        host = None
+        if hostname:
+            host = Host.Host(hostname, rsv)
+            # TODO - catch host not having configuration and print better error?
+
+        # Since a user can input either metric of consumer names we need to get a list
+        # of the installed metrics and consumers and check which category a job is in.
+        available_metrics   = rsv.get_installed_metrics()
+        available_consumers = rsv.get_installed_consumers()
+
+        num_errors = 0
+
+        for job in jobs:
+            if job in available_metrics and job in available_consumers:
+                rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
+                        "Not starting either one" % job)
+                num_errors += 1
+            elif job in available_metrics:
+                if not host:
+                    rsv.log("ERROR", "When starting specific metrics you must also specify a host.")
+                    num_errors += 1
+                    continue
+
+                rsv.echo("Starting metric '%s' against host '%s'" % (job, host.host))
+                metric = Metric.Metric(job, rsv, hostname)
+                if not condor.start_metric(metric, host):
+                    num_errors += 1
+            elif job in available_consumers:
+                rsv.echo("Starting consumer %s" % job)
+                consumer = Consumer.Consumer(job, rsv)
+                if not condor.start_consumer(consumer):
+                    num_errors += 1
+            else:
+                rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
+                num_errors += 1
+
+        if num_errors > 0:
+            rsv.log("ERROR", "%s jobs could not be started" % num_errors)
+            return False
+        else:
+            return True
             
 
-def stop(rsv, host, metrics):
+def stop(rsv, hostname=None, jobs=None):
     """ Stop all metrics - or supplied metrics """
 
     condor = Condor.Condor(rsv)
@@ -148,23 +198,64 @@ def stop(rsv, host, metrics):
         rsv.log("CRITICAL", "condor-cron is not running.")
         sys.exit(1)
 
-    if len(metrics) == 0:
-        rsv.echo("Stopping all metrics on all hosts")
-        if not condor.stop_condor_jobs("OSGRSV==\"metrics\""):
+    #
+    # If no list of jobs is specified, stop all the metrics and consumers
+    #
+    if len(jobs) == 0:
+        rsv.echo("Stopping all metrics on all hosts.")
+        if not condor.stop_jobs("OSGRSV==\"metrics\""):
             rsv.log("ERROR", "Problem stopping metrics.")
             return False
             
-        rsv.echo("Stopping consumers")
-        if not condor.stop_condor_jobs("OSGRSV==\"consumers\""):
+        rsv.echo("Stopping consumers.")
+        if not condor.stop_jobs("OSGRSV==\"consumers\""):
             rsv.log("ERROR", "Problem stopping consumers.")
             return False
 
         return True
-        
-    else:
-        if not host:
-            rsv.log("ERROR", "When stopping specific metrics with --off you must also specify a host.")
 
-        for metric in metrics:
-            rsv.log("INFO", "Stopping metric %s" % metric)
-            # todo - stop metric!
+    #
+    # Stop only the specified metrics / consumers
+    #
+    else:
+        host = None
+        if hostname:
+            host = Host.Host(hostname, rsv)
+            # TODO - catch host not having configuration and print better error?
+
+        # Since a user can input either metric of consumer names we need to get a list
+        # of the installed metrics and consumers and check which category a job is in.
+        available_metrics   = rsv.get_installed_metrics()
+        available_consumers = rsv.get_installed_consumers()
+
+        num_errors = 0
+
+        for job in jobs:
+            if job in available_metrics and job in available_consumers:
+                rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
+                        "Not stopping either one" % job)
+                num_errors += 1
+            elif job in available_metrics:
+                if not host:
+                    rsv.log("ERROR", "When stopping specific metrics you must also specify a host.")
+                    num_errors += 1
+                    continue
+
+                rsv.echo("Stopping metric '%s' for host '%s'" % (job, host.host))
+                metric = Metric.Metric(job, rsv, hostname)
+                if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % metric.get_unique_name()):
+                    num_errors += 1
+            elif job in available_consumers:
+                rsv.echo("Stopping consumer %s" % job)
+                consumer = Consumer.Consumer(job, rsv)
+                if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % consumer.get_unique_name()):
+                    num_errors += 1
+            else:
+                rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
+                num_errors += 1
+
+        if num_errors > 0:
+            rsv.log("ERROR", "%s jobs could not be stopped" % num_errors)
+            return False
+        else:
+            return True

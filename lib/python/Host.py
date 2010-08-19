@@ -24,14 +24,12 @@ class Host:
         self.load_config()
 
 
-
     def load_config(self):
         """ Load host specific configuration file """
 
         config_file = os.path.join(self.conf_dir, self.host + ".conf")
         if not os.path.exists(config_file):
             self.rsv.log("ERROR", "Host config file '%s' does not exist" % config_file)
-            return
         else:
             try:
                 self.config.read(config_file)
@@ -48,7 +46,9 @@ class Host:
             if not value or value == "off":
                 return False
             return True
-        
+
+        except ConfigParser.NoSectionError:
+            return False
         except ConfigParser.NoOptionError:
             return False
         

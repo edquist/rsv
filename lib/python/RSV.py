@@ -91,20 +91,37 @@ class RSV:
         """ Return a list of installed metrics """
         metrics_dir = os.path.join(self.rsv_location, "bin", "metrics")
         try:
-            config_files = os.listdir(metrics_dir)
-            config_files.sort()
+            files = os.listdir(metrics_dir)
+            files.sort()
             metrics = []
-            for config_file in config_files:
-                # Somewhat arbitrary pattern, but it won't match '.', '..', or '.svn'
-                if re.search("\w\.\w", config_file):
-                    metrics.append(config_file)
+            for entry in files:
+                # Each metric should be something like org.osg.
+                # This pattern will specifically not match '.', '..', '.svn', etc
+                if re.search("\w\.\w", entry):
+                    metrics.append(entry)
             return metrics
-        except OSError:
-            # todo - check for permission problem
-            self.log("ERROR", "The metrics directory does not exist (%s)" % metrics_dir)
+        except OSError, err:
+            self.log("ERROR", "The metrics directory (%s) could not be accessed.  Error msg: %s" %
+                     (metrics_dir, err))
             return []
 
 
+    def get_installed_consumers(self):
+        """ Return a list of installed consumers """
+        consumers_dir = os.path.join(self.rsv_location, "bin", "consumers")
+        try:
+            files = os.listdir(consumers_dir)
+            files.sort()
+            consumers = []
+            for entry in files:
+                if re.search("-consumer$", entry):
+                    consumers.append(entry)
+            return consumers
+        except OSError:
+            self.log("ERROR", "The consumers directory (%s) could not be accessed.  Error msg: %s" %
+                     (consumers_dir, err))
+            return []
+        
         
     def get_metric_info(self):
         """ Return a dictionary with information about each installed metric """
