@@ -12,24 +12,20 @@ import rc_metric
 import pdb
 
 
-SUBMISSION_LIST_FORMATS = ['brief', 'long', 'full', 'log', 'out', 'err']
-LIST_FORMATS = ['local'] + SUBMISSION_LIST_FORMATS
-
-
 def process_options(arguments=None):
     usage = """usage: rsv-control [ --verbose ] 
       --help | -h 
       --version
-      --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern> ]
+      --list [ --wide | -w ] [ --all ] [ <pattern> ]
       --job-list [ --host <host-name> ]
       --on      [METRIC ...]
       --off     [METRIC ...]
-      --enable  [--user <user>] --host <host-name> METRIC [METRIC ...]
+      --enable  --host <host-name> METRIC [METRIC ...]
       --disable --host <host-name> METRIC [METRIC ...]
     """
 
     version = "rsv-control 0.14"
-    description = """This script is used to manage and test the RSV monitoring software."""
+    description = "This script is used to configure and run the RSV monitoring software."
 
     parser = OptionParser(usage=usage, description=description, version=version)
     parser.add_option("--vdt-location", dest="vdt_location", default=None,
@@ -44,10 +40,8 @@ def process_options(arguments=None):
                       "then only metrics from that host are displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
                       help="Wide list display to avoid truncation in metric listing")
-    parser.add_option("--all", action="store_true", dest="list_all", default=False,
+    parser.add_option("-a", "--all", action="store_true", dest="list_all", default=False,
                       help="Display all metrics, including metrics not enabled on any host.")
-    parser.add_option("--format", dest="list_format", choices=tuple(LIST_FORMATS), default='local',
-                      help="Specify the list format (%s; default: %%default)" % (LIST_FORMATS,))
     parser.add_option("--on", action="store_true", dest="on", default=False,
                       help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
     parser.add_option("--off", action="store_true", dest="off", default=False,
@@ -106,9 +100,13 @@ def main_rsv_control():
     elif options.job_list:
         rc_metric.job_list(rsv, options.host)
     elif options.on:
-        return rc_metric.start(rsv, options.host, args)
+        return rc_metric.start(rsv, args, options.host)
     elif options.off:
-        return rc_metric.stop(rsv, options.host, args)
+        return rc_metric.stop(rsv, args, options.host)
+    elif options.enable:
+        return rc_metric.enable(rsv, args, options.host)
+    elif options.disable:
+        return rc_metric.disable(rsv, args, options.host)
 
     
 if __name__ == "__main__":
