@@ -36,7 +36,7 @@ def list_metrics(rsv, options, pattern):
 
     # Form a table for each host listing enabled metrics
     for host in hosts:
-        table = new_table("Metrics running against host: %s" % host.host, options)
+        table = new_table("Metrics enabled for host: %s" % host.host, options)
 
         enabled_metrics = host.get_enabled_metrics()
 
@@ -108,281 +108,239 @@ def job_list(rsv, hostname=None):
     """ Display jobs running similar to condor_cron_q but in a better format """
     condor = Condor.Condor(rsv)
 
+    if not condor.is_condor_running():
+        rsv.echo("ERROR: condor-cron is not running.")
+        return False
+
     if condor.display_jobs(hostname):
         return True
     else:
         return False
 
 
-def start(rsv, jobs=None, hostname=None):
-    """ Start all metrics and consumers - or supplied set of them """
+def dispatcher(rsv, action, jobs=None, hostname=None):
+    """ Handle on, off, enable, disable.  Determine if jobs are metrics or
+    consumers. """
 
     condor = Condor.Condor(rsv)
 
     if not condor.is_condor_running():
-        rsv.log("CRITICAL", "condor-cron is not running.  Cannot start RSV jobs")
+        rsv.echo("ERROR: condor-cron is not running.")
         return False
 
     # 
     # If we are not passed specific jobs to start, start all metrics and consumers
     #
     if not jobs:
-        num_errors = 0
-
-        # Start all the metrics for each host
-        for host in rsv.get_host_info():
-            enabled_metrics = host.get_enabled_metrics()
-            if len(enabled_metrics) > 0:
-                rsv.echo("Starting %s metrics for host '%s'." % (len(enabled_metrics), host.host))
-                for metric_name in enabled_metrics:
-                    metric = Metric.Metric(metric_name, rsv, host.host)
-                    if not condor.start_metric(metric, host):
-                        num_errors += 1
-
-        # Start the consumers
-        rsv.echo("Starting consumers.")
-        for consumer_name in rsv.get_enabled_consumers():
-            consumer = Consumer.Consumer(consumer_name, rsv)
-            if not condor.start_consumer(consumer):
-                num_errors += 1
-
-        if num_errors > 0:
+        if action == "start":
+            return start_all_jobs(rsv, condor)
+        elif action == "stop":
+            return stop_all_jobs(rsv, condor)
+        elif action == "enable":
+            rsv.echo("ERROR: You must supply metrics/consumers to enable")
             return False
-
-        return True
-
+        elif action == "disable":
+            rsv.echo("ERROR: You must supply metrics/consumers to disable")
+            return False
+            
     #
-    # Start only the specified set of metrics / consumers
+    # If we are passed a list of specific metrics/consumers, determine whether each
+    # item in the list is a metric or consumer, and send to the appropriate function
     #
     else:
-        host = None
-        if hostname:
-            host = Host.Host(hostname, rsv)
-            # TODO - catch host not having configuration and print better error?
-
         # Since a user can input either metric of consumer names we need to get a list
-        # of the installed metrics and consumers and check which category a job is in.
+        # of the installed metrics and consumers and check which category each job is in.
         available_metrics   = rsv.get_installed_metrics()
         available_consumers = rsv.get_installed_consumers()
 
+        host = None
+        if hostname:
+            host = Host.Host(hostname, rsv)
+
         num_errors = 0
+        write_config_file = False
 
         for job in jobs:
-            if job in available_metrics and job in available_consumers:
+            is_metric   = job in available_metrics
+            is_consumer = job in available_consumers
+            
+            if is_metric and is_consumer:
                 rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
                         "Not starting either one" % job)
                 num_errors += 1
-            elif job in available_metrics:
+            elif not is_metric and not is_consumer:
+                rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
+                num_errors += 1
+            elif is_metric:
                 if not host:
-                    rsv.log("ERROR", "When starting specific metrics you must also specify a host.")
+                    rsv.log("ERROR", "When passing specific metrics you must also specify a host.")
                     num_errors += 1
                     continue
 
-                rsv.echo("Starting metric '%s' against host '%s'" % (job, host.host))
                 metric = Metric.Metric(job, rsv, hostname)
+
+                if action == "start":
+                    num_errors += start_metric(rsv, condor, metric, host)
+                elif action == "stop":
+                    num_errors += stop_metric(rsv, condor, metric, host)
+                elif action == "enable":
+                    write_config_file |= enable_metric(rsv, metric, host)
+                elif action == "disable":
+                    write_config_file |= disable_metric(rsv, metric, host)
+
+            elif is_consumer:
+                consumer = Consumer.Consumer(job, rsv)
+
+                if action == "start":
+                    num_errors += start_consumer(rsv, condor, consumer)
+                elif action == "stop":
+                    num_errors += stop_consumer(rsv, condor, consumer)
+                elif action == "enable":
+                    write_config_file |= enable_consumer(rsv, consumer)
+                elif action == "disable":
+                    write_config_file |= disable_consumer(rsv, consumer)
+
+        if write_config_file:
+            host.write_config_file()
+
+        if num_errors > 0:
+            actions = {"start" : "starting", "stop" : "stopping", "enable" : "enabling", "disable" : "disabling" }
+            plural  = ""
+            if len(jobs) > 1:
+                plural = "s"
+            rsv.log("ERROR", "Problem %s %s job%s." % (actions[action], num_errors, plural))
+            return False
+        else:
+            return True
+
+
+
+def start_all_jobs(rsv, condor):
+    """ Start all metrics and consumers """
+
+    num_errors = 0
+
+    # Start all the metrics for each host
+    for host in rsv.get_host_info():
+        enabled_metrics = host.get_enabled_metrics()
+        if len(enabled_metrics) > 0:
+            rsv.echo("Starting %s metrics for host '%s'." % (len(enabled_metrics), host.host))
+            for metric_name in enabled_metrics:
+                metric = Metric.Metric(metric_name, rsv, host.host)
                 if not condor.start_metric(metric, host):
                     num_errors += 1
-            elif job in available_consumers:
-                rsv.echo("Starting consumer %s" % job)
-                consumer = Consumer.Consumer(job, rsv)
-                if not condor.start_consumer(consumer):
-                    num_errors += 1
-            else:
-                rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
-                num_errors += 1
 
-        if num_errors > 0:
-            rsv.log("ERROR", "%s jobs could not be started" % num_errors)
-            return False
-        else:
-            return True
-            
-
-def stop(rsv, jobs=None, hostname=None):
-    """ Stop all metrics - or supplied metrics """
-
-    condor = Condor.Condor(rsv)
-
-    if not condor.is_condor_running():
-        rsv.log("CRITICAL", "condor-cron is not running.")
-        sys.exit(1)
-
-    #
-    # If no list of jobs is specified, stop all the metrics and consumers
-    #
-    if len(jobs) == 0:
-        rsv.echo("Stopping all metrics on all hosts.")
-        if not condor.stop_jobs("OSGRSV==\"metrics\""):
-            rsv.log("ERROR", "Problem stopping metrics.")
-            return False
-            
-        rsv.echo("Stopping consumers.")
-        if not condor.stop_jobs("OSGRSV==\"consumers\""):
-            rsv.log("ERROR", "Problem stopping consumers.")
-            return False
-
-        return True
-
-    #
-    # Stop only the specified metrics / consumers
-    #
-    else:
-        host = None
-        if hostname:
-            host = Host.Host(hostname, rsv)
-            # TODO - catch host not having configuration and print better error?
-
-        # Since a user can input either metric of consumer names we need to get a list
-        # of the installed metrics and consumers and check which category a job is in.
-        available_metrics   = rsv.get_installed_metrics()
-        available_consumers = rsv.get_installed_consumers()
-
-        num_errors = 0
-
-        for job in jobs:
-            if job in available_metrics and job in available_consumers:
-                rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
-                        "Not stopping either one" % job)
-                num_errors += 1
-            elif job in available_metrics:
-                if not host:
-                    rsv.log("ERROR", "When stopping specific metrics you must also specify a host.")
-                    num_errors += 1
-                    continue
-
-                rsv.echo("Stopping metric '%s' for host '%s'" % (job, host.host))
-                metric = Metric.Metric(job, rsv, hostname)
-                if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % metric.get_unique_name()):
-                    num_errors += 1
-            elif job in available_consumers:
-                rsv.echo("Stopping consumer %s" % job)
-                consumer = Consumer.Consumer(job, rsv)
-                if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % consumer.get_unique_name()):
-                    num_errors += 1
-            else:
-                rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
-                num_errors += 1
-
-        if num_errors > 0:
-            rsv.log("ERROR", "%s jobs could not be stopped" % num_errors)
-            return False
-        else:
-            return True
-
-
-def enable(rsv, jobs, hostname=None):
-    """ Enable the specified metrics against the specified hosts.  This can also be used to enable
-    consumers, in which case the host does not need to be passed. """
-
-    host = None
-    if hostname:
-        host = Host.Host(hostname, rsv)
-
-    # Since a user can input either metric of consumer names we need to get a list
-    # of the installed metrics and consumers and check which category a job is in.
-    available_metrics   = rsv.get_installed_metrics()
-    available_consumers = rsv.get_installed_consumers()
-
-    write_host_config = False
-
-    num_errors = 0
-
-    if not jobs:
-        rsv.echo("ERROR: You must supply metrics/consumers to enable")
-        return False
-
-    for job in jobs:
-        if job in available_metrics and job in available_consumers:
-            rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
-                    "Not enabling either one." % job)
-            num_errors += 1
-        elif job in available_metrics:
-            if not host:
-                rsv.log("ERROR", "When enabling specific metrics you must also specify a host.")
-                num_errors += 1
-                continue
-
-            rsv.echo("Enabling metric '%s' for host '%s'" % (job, host.host))
-
-            if host.metric_enabled(job):
-                rsv.echo("   Metric already enabled")
-            else:
-                host.set_config(job, 1)
-                write_host_config = True
-
-        elif job in available_consumers:
-            rsv.echo("Enabling consumer %s" % job)
-            consumer = Consumer.Consumer(job, rsv)
-            # TODO - enable consumer
-        else:
-            rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
+    # Start the consumers
+    rsv.echo("Starting consumers.")
+    for consumer_name in rsv.get_enabled_consumers():
+        consumer = Consumer.Consumer(consumer_name, rsv)
+        if not condor.start_consumer(consumer):
             num_errors += 1
 
-    if write_host_config:
-        host.write_config_file()
-
-    
     if num_errors > 0:
-        rsv.log("ERROR", "%s jobs could not be enabled." % num_errors)
+        return False
+
+    return True
+
+
+def start_metric(rsv, condor, metric, host):
+    """ Start a single metric against the supplied host """
+
+    rsv.echo("Starting metric '%s' against host '%s'" % (metric.name, host.host))
+
+    if not condor.start_metric(metric, host):
+        return 1
+
+    return 0
+
+
+def start_consumer(rsv, condor, consumer):
+    """ Start a single consumer """
+
+    rsv.echo("Starting consumer %s" % consumer.name)
+
+    if not condor.start_consumer(consumer):
+        return 1
+
+    return 0
+
+
+
+def stop_all_jobs(rsv, condor):
+    """ Stop all metrics """
+
+    rsv.echo("Stopping all metrics on all hosts.")
+    if not condor.stop_jobs("OSGRSV==\"metrics\""):
+        rsv.echo("ERROR: Problem stopping metrics.")
+        return False
+
+    rsv.echo("Stopping consumers.")
+    if not condor.stop_jobs("OSGRSV==\"consumers\""):
+        rsv.echo("ERROR: Problem stopping consumers.")
+        return False
+
+    return True
+
+
+def stop_metric(rsv, condor, metric, host):
+    """ Stop a single metric against the specified host """
+    rsv.echo("Stopping metric '%s' for host '%s'" % (metric.name, host.host))
+    metric = Metric.Metric(metric.name, rsv, host.host)
+    if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % metric.get_unique_name()):
+        return 1
+
+    return 0
+
+def stop_consumer(rsv, condor, consumer):
+    """ Stop a single consumer """ 
+    rsv.echo("Stopping consumer %s" % consumer.name)
+    if not condor.stop_jobs("OSGRSVUniqueName==\"%s\"" % consumer.get_unique_name()):
+        return 1
+
+    return 0
+
+
+def enable_metric(rsv, metric, host):
+    """ Enable the specified metric against the specified host. """
+
+    rsv.echo("Enabling metric '%s' for host '%s'" % (metric.name, host.host))
+
+    if host.metric_enabled(metric.name):
+        rsv.echo("   Metric already enabled")
         return False
     else:
+        host.set_config(metric.name, 1)
         return True
-
-
-def disable(rsv, jobs, hostname=None):
-    """ Enable the specified metrics against the specified hosts.  This can also be used to enable
-    consumers, in which case the host does not need to be passed. """
-
-    host = None
-    if hostname:
-        host = Host.Host(hostname, rsv)
-
-    # Since a user can input either metric of consumer names we need to get a list
-    # of the installed metrics and consumers and check which category a job is in.
-    available_metrics   = rsv.get_installed_metrics()
-    available_consumers = rsv.get_installed_consumers()
-
-    write_host_config = False
-
-    num_errors = 0
-
-    if not jobs:
-        rsv.echo("ERROR: You must supply metrics/consumers to disable")
-        return False
-
-    for job in jobs:
-        if job in available_metrics and job in available_consumers:
-            rsv.log("WARNING", "Both a metric and a consumer are installed with the name '%s'. " +
-                    "Not disabling either one." % job)
-            num_errors += 1
-        elif job in available_metrics:
-            if not host:
-                rsv.log("ERROR", "When disabling specific metrics you must also specify a host.")
-                num_errors += 1
-                continue
-
-            rsv.echo("Disabling metric '%s' for host '%s'" % (job, host.host))
-
-            if not host.metric_enabled(job):
-                rsv.echo("   Metric already disabled")
-            else:
-                host.set_config(job, 0)
-                write_host_config = True
-
-        elif job in available_consumers:
-            rsv.echo("Disabling consumer %s" % job)
-            consumer = Consumer.Consumer(job, rsv)
-            # TODO - disable consumer
-        else:
-            rsv.log("WARNING", "Supplied job '%s' is not an installed metric or consumer" % job)
-            num_errors += 1
-
-    if write_host_config:
-        host.write_config_file()
-
     
-    if num_errors > 0:
-        rsv.log("ERROR", "%s jobs could not be disabled." % num_errors)
+        
+def enable_consumer(rsv, consumer):
+    """ Enable the specified consumer.  NOT YET IMPLEMENTED """
+    
+    rsv.echo("Enabling consumer %s" % consumer.name)
+    rsv.echo("Enabling consumers is not yet implemented.  Edit rsv.conf directly.")
+
+    return False
+
+
+def disable_metric(rsv, metric, host):
+    """ Disable the specified metric against the specified host. """
+
+    rsv.echo("Disabling metric '%s' for host '%s'" % (metric.name, host.host))
+
+    if not host.metric_enabled(metric.name):
+        rsv.echo("   Metric already disabled")
         return False
     else:
+        host.set_config(metric.name, 0)
         return True
+
+
+def disable_consumer(rsv, consumer):
+    """ Disable the specified consumer """
+
+    rsv.echo("Disabling consumer %s" % consumer.name)
+    rsv.echo("Disabling consumers is not yet implemented.  Edit rsv.conf directly.")
+
+    return False
+
+

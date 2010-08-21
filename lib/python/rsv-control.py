@@ -16,12 +16,12 @@ def process_options(arguments=None):
     usage = """usage: rsv-control [ --verbose ] 
       --help | -h 
       --version
-      --list [ --wide | -w ] [ --all ] [ <pattern> ]
+      --list [ --wide ] [ --all ] [ <pattern> ]
       --job-list [ --host <host-name> ]
-      --on      [METRIC ...]
-      --off     [METRIC ...]
-      --enable  --host <host-name> METRIC [METRIC ...]
-      --disable --host <host-name> METRIC [METRIC ...]
+      --on      [METRIC|CONSUMER ...]
+      --off     [METRIC|CONSUMER ...]
+      --enable  [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
+      --disable [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
     """
 
     version = "rsv-control 0.14"
@@ -100,13 +100,13 @@ def main_rsv_control():
     elif options.job_list:
         rc_metric.job_list(rsv, options.host)
     elif options.on:
-        return rc_metric.start(rsv, args, options.host)
+        return rc_metric.dispatcher(rsv, "start", args, options.host)
     elif options.off:
-        return rc_metric.stop(rsv, args, options.host)
+        return rc_metric.dispatcher(rsv, "stop", args, options.host)
     elif options.enable:
-        return rc_metric.enable(rsv, args, options.host)
+        return rc_metric.dispatcher(rsv, "enable", args, options.host)
     elif options.disable:
-        return rc_metric.disable(rsv, args, options.host)
+        return rc_metric.dispatcher(rsv, "disable", args, options.host)
 
     
 if __name__ == "__main__":

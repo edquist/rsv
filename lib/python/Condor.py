@@ -322,40 +322,44 @@ class Condor:
         hosts = {}
         running_metrics = {}
         classads = self.get_classads("OSGRSV==\"metrics\"")
-        for classad in classads:
-            match = re.search("-u ([\w.-]+)", classad["Args"])
-            host = "UNKNOWN?"
-            if match:
-                host = match.group(1)
 
-            if hostname and hostname != host:
-                continue
-                
-            if host not in hosts:
-                running_metrics[host] = []
-                hosts[host] = "Hostname: %s\n" % host
-                hosts[host] += "%7s %-10s %-2s %-15s %-44s\n" % \
-                               ("ID", "OWNER", "ST", "NEXT RUN TIME", "METRIC")
+        if not classads:
+            self.rsv.echo("No metrics are running")
+        else:
+            for classad in classads:
+                match = re.search("-u ([\w.-]+)", classad["Args"])
+                host = "UNKNOWN?"
+                if match:
+                    host = match.group(1)
 
-            (metric, text) = display_metric(classad)
-            running_metrics[host].append(metric)
-            hosts[host] += text
+                if hostname and hostname != host:
+                    continue
+
+                if host not in hosts:
+                    running_metrics[host] = []
+                    hosts[host] = "Hostname: %s\n" % host
+                    hosts[host] += "%7s %-10s %-2s %-15s %-44s\n" % \
+                                   ("ID", "OWNER", "ST", "NEXT RUN TIME", "METRIC")
+
+                (metric, text) = display_metric(classad)
+                running_metrics[host].append(metric)
+                hosts[host] += text
 
 
-        self.rsv.echo("") # get a newline to separate output from command
-        for host in hosts:
-            self.rsv.echo(hosts[host])
+            self.rsv.echo("") # get a newline to separate output from command
+            for host in hosts:
+                self.rsv.echo(hosts[host])
 
-            # Determine if any metrics are enabled on this host, but not running
-            missing_metrics = []
-            enabled_metrics = Host.Host(host, self.rsv).get_enabled_metrics()
-            for metric in enabled_metrics:
-                if metric not in running_metrics[host]:
-                    missing_metrics.append(metric)
+                # Determine if any metrics are enabled on this host, but not running
+                missing_metrics = []
+                enabled_metrics = Host.Host(host, self.rsv).get_enabled_metrics()
+                for metric in enabled_metrics:
+                    if metric not in running_metrics[host]:
+                        missing_metrics.append(metric)
 
-            if missing_metrics:
-                self.rsv.echo("WARNING: The following metrics are enabled for this host but not running:\n%s\n" %
-                              " ".join(missing_metrics))
+                if missing_metrics:
+                    self.rsv.echo("WARNING: The following metrics are enabled for this host but not running:\n%s\n" %
+                                  " ".join(missing_metrics))
 
                 
         #
@@ -364,26 +368,29 @@ class Condor:
         if not hostname:
             classads = self.get_classads("OSGRSV==\"consumers\"")
             running_consumers = []
-            if classads:
+            if not classads:
+                self.rsv.echo("No consumers are running")
+            else:
                 self.rsv.echo("%7s %-10s %-2s %-30s" % ("ID", "OWNER", "ST", "CONSUMER"))
-            for classad in classads:
-                status = job_status[int(classad["JobStatus"])]
-                owner = classad["Owner"].replace('"', "")
-                consumer = classad["OSGRSVUniqueName"].replace('"', "")
-                running_consumers.append(consumer)
-                self.rsv.echo("%5s.%-1s %-10s %-2s %-30s" % (classad["ClusterId"], classad["ProcId"],
-                                                             owner, status, consumer))
 
-            # Display a warning if any consumers are enabled but not running
-            enabled_consumers = self.rsv.get_enabled_consumers()
-            missing_consumers = []
-            for consumer in enabled_consumers:
-                if consumer not in running_consumers:
-                    missing_consumers.append(consumer)
+                for classad in classads:
+                    status = job_status[int(classad["JobStatus"])]
+                    owner = classad["Owner"].replace('"', "")
+                    consumer = classad["OSGRSVUniqueName"].replace('"', "")
+                    running_consumers.append(consumer)
+                    self.rsv.echo("%5s.%-1s %-10s %-2s %-30s" % (classad["ClusterId"], classad["ProcId"],
+                                                                 owner, status, consumer))
 
-            if missing_consumers:
-                self.rsv.echo("\nWARNING: The following consumers are enabled but not running:\n%s\n" %
-                              " ".join(missing_consumers))
+                # Display a warning if any consumers are enabled but not running
+                enabled_consumers = self.rsv.get_enabled_consumers()
+                missing_consumers = []
+                for consumer in enabled_consumers:
+                    if consumer not in running_consumers:
+                        missing_consumers.append(consumer)
+
+                if missing_consumers:
+                    self.rsv.echo("\nWARNING: The following consumers are enabled but not running:\n%s\n" %
+                                  " ".join(missing_consumers))
 
 
 def parse_classads(output):
