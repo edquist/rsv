@@ -3,7 +3,20 @@
 """ This script processes records and uploads them to the Gratia collector """
 
 import os
+import re
 import sys
+
+import pdb
+
+# Declare globals to hold the imported Gratia and Metric objects
+# We can't import them until we know the value of VDT_LOCATION because we set
+# the import path accordingly.
+Gratia = None
+Metric = None
+
+class InvalidRecordError(Exception):
+    """ Custom exception for a bad record format """
+    pass
 
 
 def initialize():
@@ -11,7 +24,7 @@ def initialize():
 
     info = {}
 
-    log("Gratia consumer initializing...")
+    log("Gratia consumer initializing.")
 
     if "VDT_LOCATION" not in os.environ:
         die("ERROR: VDT_LOCATION must be set in the environment")
@@ -21,26 +34,56 @@ def initialize():
     if not os.path.exists(info["vdt_location"]):
         die("ERROR: VDT_LOCATION is set to a non-existent value: '%s'" % info["vdt_location"])
 
+    # Where records will be read from
+    # This script will delete files from this directory, so it also needs write access.
     info["output_dir"] = os.path.join(info["vdt_location"], "osg-rsv", "output", "gratia-consumer")
+    if not os.access(info["output_dir"], os.F_OK):
+        die("ERROR: Records directory does not exist '%s'" % info["output_dir"])
+    if not os.access(info["output_dir"], os.R_OK):
+        die("ERROR: Cannot read records directory '%s'" % info["output_dir"])
+    if not os.access(info["output_dir"], os.W_OK):
+        die("ERROR: Cannot write records directory '%s'" % info["output_dir"])
+
+    # Where records will be moved if they fail
+    # This script will move files to this directory that fail, so it needs write access.
+    # It won't read anything from the directory, but there's probably a problem if it can't.
     info["failed_dir"] = os.path.join(info["vdt_location"], "osg-rsv", "output", "failed-gratia-records")
+    if not os.access(info["failed_dir"], os.F_OK):
+        log("Directory for failed gratia scripts does not exist at %s.  Creating it." %
+            info["failed_dir"],)
+        try:
+            os.mkdir(info["failed_dir"], 0755)
+        except OSError, err:
+            die("ERROR: Could not create directory.  Error: %s" % err)
+    if not os.access(info["failed_dir"], os.R_OK):
+        die("ERROR: Cannot read failed records directory '%s'" % info["failed_dir"])
+    if not os.access(info["failed_dir"], os.W_OK):
+        die("ERROR: Cannot write failed records directory '%s'" % info["failed_dir"])
 
     # TODO - make this a configuration setting
     info["gratia_config_file"] = os.path.join(info["vdt_location"], "gratia", "probe", "metric", "ProbeConfig")
 
+    return info
+
 def load_gratia_libraries(info):
     """ Import the Gratia libraries """
 
-    sys.path.prepend(os.path.join(info["vdt_location"], "gratia", "probe", "metric"))
-    sys.path.prepend(os.path.join(info["vdt_location"], "gratia", "probe", "common"))
+    # This script will find its own libraries, no need to set PYTHONPATH.  This makes
+    # it more convenient to run it by hand.
+    sys.path.insert(0, os.path.join(info["vdt_location"], "gratia", "probe", "metric"))
+    sys.path.insert(0, os.path.join(info["vdt_location"], "gratia", "probe", "common"))
 
     try:
+        global Gratia
+        global Metric
         import Gratia
         import Metric
     except ImportError, err:
-        print "ERROR: Could not import Gratia python libraries: %s" % err
-        print "\nsys.path:"
-        print "\n".join(sys.path)
-        die("")
+        msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
+        msg += "Contents of sys.path:\n"
+        msg += "\n".join(sys.path)
+        die(msg)
+
 
 def process_files(info):
     """ Open the records directory and load each file """
@@ -49,14 +92,30 @@ def process_files(info):
 
     files = os.listdir(info["output_dir"])
     log("Processing %s files" % len(files))
-    for file in files:
+    for filename in files:
+        success = 0
+
+        file = os.path.join(info["output_dir"], filename)
         fh = open(file, 'r')
         record = fh.read()
         fh.close()
-        gratia_record = generate_gratia_record(record)
 
-        error_msg = Gratia.Send(gratia_record)
-        if not error_msg:
+        try:
+            gratia_record = process_record(record)
+
+            # Gratia.Send will return an empty string on success, or an string containing
+            # the problem on error.
+            error_msg = Gratia.Send(gratia_record)
+            if not error_msg:
+                success = 1
+                
+        except InvalidRecordError, err:
+            print "ERROR: Invalid record in file '%s'.  Error: %s" % (file, err)
+        except Exception, err:
+            print "ERROR: An unknown exception occurred when processing file '%s'. Error: " % file
+            print err
+
+        if success:
             try:
                 os.remove(file)
             except OSError, err:
@@ -64,14 +123,29 @@ def process_files(info):
                 # So stop processing now to avoid duplicate data.
                 die("ERROR: Failed to remove record '%s'.  Error: %s" % (file, err))
         else:
-            # TODO Move to the failed-gratia-records directory
+            failed_file = os.path.join(info["failed_dir"], filename)
+            try:
+                os.rename(file, failed_file)
+            except OSError, err:
+                # If we cannot move the files then we are going to process them again
+                # So stop processing now to avoid duplicate data.
+                die("ERROR: Failed to move record '%s' to '%s'.  Error: %s" %
+                    (file, failed_file, err))
 
 
-def process_recrd(full_record):
+def process_record(raw_record):
     """ Process a record in WLCG format """
-    record = parse_wlcg_record(full_record)
+    record = parse_wlcg_record(raw_record)
 
-    # TODO - check that record is valid
+    # Check that we got the values we are expecting
+    for attribute in ("metricName", "metricType", "metricStatus", "timestamp", "serviceType",
+                      "summaryData", "detailsData"):
+        if attribute not in record:
+            raise InvalidRecordError("Missing %s" % attribute)
+
+    # We need to have either (hostName) or (serviceURI + gatheredAt)
+    if "hostName" not in record and not ("serviceURI" in record and "gatheredAt" in record):
+        raise InvalidRecordError("Missing either hostName or (serviceURI + gatheredAt)")
 
     # This code is based on the Python scripts RSV generates
     rec = Metric.MetricRecord()
@@ -83,9 +157,9 @@ def process_recrd(full_record):
     rec.SummaryData(record["summaryData"])
     rec.DetailsData(record["detailsData"])
 
-    # serviceUri and gatheredAt will be on "non-local" metrics
-    if "serviceUri" in record and "gatheredAt" in record:
-        rec.ServiceUri(record["serviceUri"])
+    # serviceURI and gatheredAt will be on "non-local" metrics
+    if "serviceURI" in record and "gatheredAt" in record:
+        rec.ServiceUri(record["serviceURI"])
         rec.GatheredAt(record["gatheredAt"])
     # And hostName will be in "local" metrics
     elif "hostName" in record:
@@ -94,7 +168,7 @@ def process_recrd(full_record):
     return rec
 
 
-def parse_wlcg_record(record):
+def parse_wlcg_record(raw_record):
     """ Parse a record in WLCG format and return a dict with values.  Example of WLCG record:
 
     metricName: org.osg.general.ping-host
@@ -112,21 +186,44 @@ def parse_wlcg_record(record):
 
     """
 
+    record = {}
 
-    pass
+    # detailsData will always come last, and might be multiple lines
+    # Keep state so that once we are in the detailsData section, we put the rest of the
+    # lines into detailsData and return when we see EOT
+    in_details_data = 0
+    for line in raw_record.split('\n'):
+        if not in_details_data:
+            match = re.match("(\w+): (.+)$", line)
+            if match:
+                record[match.group(1)] = match.group(2)
+                if match.group(1) == "detailsData":
+                    in_details_data = 1
+            else:
+                raise InvalidRecordError("Invalid line:\n\t%s" % line)
+        else:
+            if re.match("EOT$", line):
+                return record
+            else:
+                record["detailsData"] += line
+
+    # If we reach this point, it means we did not see EOT.  So the record is invalid
+    raise InvalidRecordError("'EOT' marker missing")
+            
 
 def log(msg):
     """ Print a message with a timestamp """
     timestamp = "TODO: "
+    # TODO - print to a file
     print "%s %s" % (timestamp, msg)
 
 def die(msg):
     """ Print an error message and exit with a non-zero status """
-    print msg
+    log(msg)
     sys.exit(1)
 
 
 
 info = initialize()
 load_gratia_libraries(info)
-proess_records(info)
+process_files(info)
