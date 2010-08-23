@@ -12,8 +12,10 @@ import ConfigParser
 # RSV libraries
 import Host
 import Metric
+import Results
+import Sysutils
 
-
+OPENSSL_EXE = "/usr/bin/openssl"
 
 class RSV:
     """ Class to load and store configuration information about this install
@@ -24,6 +26,7 @@ class RSV:
     rsv_location = None
     config = None
     logger = None
+    proxy = None
     quiet = 0
 
     def __init__(self, vdt_location=None, verbosity=1):
@@ -251,6 +254,108 @@ class RSV:
     def get_wrapper(self):
         """ Return the wrapper script that will run the metrics """
         return os.path.join(self.rsv_location, "bin", "run-rsv-metric")
+
+
+    def get_proxy(self):
+        """ Return the path of the proxy file being used """
+        return self.proxy
+
+
+    def check_proxy(self, metric):
+        """ Determine if we're using a service cert or user proxy and
+        validate appropriately """
+
+        self.log("INFO", "Checking proxy:")
+
+        if metric.config_val("need-proxy", "false"):
+            self.log("INFO", "Skipping proxy check because need-proxy=false", 4)
+            return
+
+        # First look for the service certificate.  Since this is the preferred option,
+        # it will override the proxy-file if both are set.
+        try:
+            service_cert  = self.config.get("rsv", "service-cert")
+            service_key   = self.config.get("rsv", "service-key")
+            service_proxy = self.config.get("rsv", "service-proxy")
+            self.renew_service_certificate_proxy(metric, service_cert, service_key, service_proxy)
+            self.proxy = service_proxy
+            return
+        except ConfigParser.NoOptionError:
+            self.log("INFO", "Not using service certificate.  Checking for user proxy", 4)
+            pass
+
+        # If the service certificate is not available, look for a user proxy file
+        try:
+            proxy_file = self.config.get("rsv", "proxy-file")
+            check_user_proxy(metric, proxy_file)
+            self.proxy = proxy_file
+            return
+        except ConfigParser.NoOptionError:
+            pass
+
+        # If we won't have a proxy, and need-proxy was not set above, we bail
+        Results.no_proxy_found(self, metric)
+
+
+
+    def renew_service_certificate_proxy(self, metric, cert, key, proxy):
+        """ Check the service certificate.  If it is expiring soon, renew it. """
+
+        self.log("INFO", "Checking service certificate proxy:", 4)
+
+        hours_til_expiry = 4
+        seconds_til_expiry = hours_til_expiry * 60 * 60
+        (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+                                     (OPENSSL_EXE, proxy, seconds_til_expiry))
+
+        if ret == 0:
+            self.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
+        else:
+            self.log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
+                    hours_til_expiry, 4)
+
+            grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
+            (ret, out) = Sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
+                                         (grid_proxy_init_exe, cert, key, proxy))
+
+            if ret:
+                Results.service_proxy_renewal_failed(self, metric, cert, key, proxy, out)
+
+        # Globus needs help finding the service proxy since it probably does not have the
+        # default naming scheme of /tmp/x509_u<UID>
+        os.environ["X509_USER_PROXY"] = proxy
+        os.environ["X509_PROXY_FILE"] = proxy
+
+        # todo - need to tell RSVv3 probes about this proxy
+
+        return
+
+
+
+    def check_user_proxy(self, metric, proxy_file):
+        """ Check that a proxy file is valid """
+
+        self.log("INFO", "Checking user proxy", 4)
+
+        # Check that the file exists on disk
+        if not os.path.exists(proxy_file):
+            Results.missing_user_proxy(self, metric, proxy_file)
+
+        # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
+        # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
+        # so this check might need to be adjusted if that behavior is more understood.
+        minutes_til_expiration = 10
+        seconds_til_expiration = minutes_til_expiration * 60
+        (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+                                     (OPENSSL_EXE, proxy_file, seconds_til_expiration))
+        if ret:
+            Results.expired_user_proxy(self, metric, proxy_file, out, minutes_til_expiration)
+
+        # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
+        os.environ["X509_USER_PROXY"] = proxy_file
+        os.environ["X509_PROXY_FILE"] = proxy_file
+
+        return
 
 
 # End of RSV class

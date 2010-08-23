@@ -154,6 +154,15 @@ class Metric:
         except ConfigParser.NoSectionError:
             self.rsv.log("INFO", "No '%s' section found" % args_section, 4)
 
+
+        # RSVv3 requires a few more arguments
+        if self.config_val("probe-spec", "v3"):
+            # We always need to tell RSVv3 about where the proxy is
+            proxy_file = self.rsv.get_proxy()
+            if proxy_file:
+                args += "-x %s " % proxy_file
+            # TODO - --verbose?
+
         return args
 
 

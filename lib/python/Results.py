@@ -2,13 +2,18 @@
 
 # Standard libraries
 import os
+import re
 import sys
 import socket
+import calendar
 import tempfile
 import ConfigParser
-from time import strftime, gmtime
+from time import localtime, strftime, strptime, gmtime
 
+import pdb
 
+UTC_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+LOCAL_TIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
 
 def timestamp(local=False):
     """ When generating timestamps, we want to use UTC when communicating with
@@ -23,20 +28,40 @@ def timestamp(local=False):
     """
     
     if local:
-        return strftime("%Y-%m-%d %H:%M:%S %Z")
+        return strftime(LOCAL_TIME_FORMAT)
     else:
-        return strftime("%Y-%m-%dT%H:%M:%SZ", gmtime())
+        return strftime(UTC_TIME_FORMAT, gmtime())
+
+
+def utc_to_local(utc_timestamp):
+    """ Convert a UTC timestamp to a local timestamp.  For example:
+    2010-07-25T05:18:14Z -> 2010-07-25 00:18:14 CDT """
+
+    time_struct = strptime(utc_timestamp, UTC_TIME_FORMAT)
+    seconds_since_epoch = calendar.timegm(time_struct)
+    local_time_struct = localtime(seconds_since_epoch)
+    return strftime(LOCAL_TIME_FORMAT, local_time_struct)
 
 
 
 def wlcg_result(rsv, metric, output):
     """ Handle WLCG formatted output """
     
-    # TODO - trim using details-data-trim-length
+    # Trim detailsData using details-data-trim-length
+    trim_length = rsv.config.get("rsv", "details-data-trim-length")
+    if trim_length > 0:
+        rsv.log("INFO", "Trimming data to %s bytes because details-data-trim-length is set" %
+                trim_length)
+        # TODO - trim detailsData
 
-    # TODO - adjust timestamp
+    # Create a record with a local timestamp.
+    local_output = output
+    match = re.search("timestamp: ([\w\:\-]+)", local_output)
+    if match:
+        local_timestamp = utc_to_local(match.group(1))
+        local_output = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_output)
 
-    print_result(rsv, metric, output, output)
+    print_result(rsv, metric, output, local_output)
     
 
 def brief_result(rsv, metric, status, data):
@@ -159,7 +184,7 @@ def validate_directory(rsv, output_dir):
             return True
         else:
             rsv.log("WARNING", "Directory '%s'is NOT writable by user '%s'" %
-                    (output_dir, os.getlogin()), 4)
+                    (output_dir, rsv.get_user()), 4)
             return False
 
 

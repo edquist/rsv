@@ -21,7 +21,6 @@ import pdb
 #
 # Globals
 #
-OPENSSL_EXE = "/usr/bin/openssl"
 VALID_OUTPUT_FORMATS = ["wlcg", "brief"]
 
 
@@ -168,99 +167,6 @@ def validate_config(rsv, metric):
 
 
 
-def check_proxy(rsv, metric):
-    """ Determine if we're using a service cert or user proxy and
-    validate appropriately """
-
-    rsv.log("INFO", "Checking proxy:")
-
-    if metric.config_val("need-proxy", "false"):
-        rsv.log("INFO", "Skipping proxy check because need-proxy=false", 4)
-        return
-
-    # First look for the service certificate.  Since this is the preferred option,
-    # it will override the proxy-file if both are set.
-    try:
-        service_cert  = rsv.config.get("rsv", "service-cert")
-        service_key   = rsv.config.get("rsv", "service-key")
-        service_proxy = rsv.config.get("rsv", "service-proxy")
-        renew_service_certificate_proxy(rsv, metric, service_cert, service_key, service_proxy)
-        return
-    except ConfigParser.NoOptionError:
-        rsv.log("INFO", "Not using service certificate.  Checking for user proxy", 4)
-        pass
-
-    # If the service certificate is not available, look for a user proxy file
-    try:
-        proxy_file = rsv.config.get("rsv", "proxy-file")
-        check_user_proxy(rsv, metric, proxy_file)
-        return
-    except ConfigParser.NoOptionError:
-        pass
-
-    # If we won't have a proxy, and need-proxy was not set above, we gotta bail
-    Results.no_proxy_found(rsv, metric)
-
-
-
-def renew_service_certificate_proxy(rsv, metric, cert, key, proxy):
-    """ Check the service certificate.  If it is expiring soon, renew it. """
-
-    rsv.log("INFO", "Checking service certificate proxy:", 4)
-
-    hours_til_expiry = 4
-    seconds_til_expiry = hours_til_expiry * 60 * 60
-    (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
-                                 (OPENSSL_EXE, proxy, seconds_til_expiry))
-    
-    if ret == 0:
-        rsv.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
-    else:
-        rsv.log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
-                hours_til_expiry, 4)
-
-        grid_proxy_init_exe = os.path.join(rsv.vdt_location, "globus", "bin", "grid-proxy-init")
-        (ret, out) = Sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
-                                     (grid_proxy_init_exe, cert, key, proxy))
-
-        if ret:
-            Results.service_proxy_renewal_failed(rsv, metric, cert, key, proxy, out)
-
-    # Globus needs help finding the service proxy since it probably does not have the
-    # default naming scheme of /tmp/x509_u<UID>
-    os.environ["X509_USER_PROXY"] = proxy
-    os.environ["X509_PROXY_FILE"] = proxy
-
-    # todo - need to tell RSVv3 probes about this proxy
-
-    return
-
-
-
-def check_user_proxy(rsv, metric, proxy_file):
-    """ Check that a proxy file is valid """
-
-    rsv.log("INFO", "Checking user proxy", 4)
-    
-    # Check that the file exists on disk
-    if not os.path.exists(proxy_file):
-        Results.missing_user_proxy(rsv, metric, proxy_file)
-
-    # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
-    # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
-    # so this check might need to be adjusted if that behavior is more understood.
-    minutes_til_expiration = 10
-    seconds_til_expiration = minutes_til_expiration * 60
-    (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
-                                 (OPENSSL_EXE, proxy_file, seconds_til_expiration))
-    if ret:
-        Results.expired_user_proxy(rsv, metric, proxy_file, out, minutes_til_expiration)
-
-    # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
-    os.environ["X509_USER_PROXY"] = proxy_file
-    os.environ["X509_PROXY_FILE"] = proxy_file
-
-    return
 
 
 
@@ -380,7 +286,6 @@ def execute_job(rsv, metric):
                 del os.environ[var]
 
 
-
     #
     # Build the command line for the job
     #
@@ -451,7 +356,7 @@ def main_run_rsv_metric():
     validate_config(rsv, metric)
 
     # Check for some basic error conditions
-    check_proxy(rsv, metric)
+    rsv.check_proxy(metric)
     ping_test(rsv, metric, options)
 
     # Run the job and parse the result
