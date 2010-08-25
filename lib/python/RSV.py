@@ -24,6 +24,8 @@ class RSV:
     
     vdt_location = None
     rsv_location = None
+    sysutils = None
+    results = None
     config = None
     logger = None
     proxy = None
@@ -42,6 +44,10 @@ class RSV:
         # For any messages that won't go through the logger
         if verbosity == 0:
             self.quiet = 1
+
+        # Instantiate our helper objects
+        self.sysutils = Sysutils.Sysutils(self)
+        self.results  = Results.Results(self)
 
         # Setup the logger
         self.init_logging(verbosity)
@@ -294,7 +300,7 @@ class RSV:
             pass
 
         # If we won't have a proxy, and need-proxy was not set above, we bail
-        Results.no_proxy_found(self, metric)
+        self.results.no_proxy_found(metric)
 
 
 
@@ -305,8 +311,8 @@ class RSV:
 
         hours_til_expiry = 4
         seconds_til_expiry = hours_til_expiry * 60 * 60
-        (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
-                                     (OPENSSL_EXE, proxy, seconds_til_expiry))
+        (ret, out) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
+                                      (OPENSSL_EXE, proxy, seconds_til_expiry))
 
         if ret == 0:
             self.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
@@ -315,11 +321,11 @@ class RSV:
                     hours_til_expiry, 4)
 
             grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
-            (ret, out) = Sysutils.system("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
-                                         (grid_proxy_init_exe, cert, key, proxy))
+            (ret, out) = self.run_command("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
+                                          (grid_proxy_init_exe, cert, key, proxy))
 
             if ret:
-                Results.service_proxy_renewal_failed(self, metric, cert, key, proxy, out)
+                self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out)
 
         # Globus needs help finding the service proxy since it probably does not have the
         # default naming scheme of /tmp/x509_u<UID>
@@ -339,17 +345,17 @@ class RSV:
 
         # Check that the file exists on disk
         if not os.path.exists(proxy_file):
-            Results.missing_user_proxy(self, metric, proxy_file)
+            self.results.missing_user_proxy(metric, proxy_file)
 
         # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
         # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
         # so this check might need to be adjusted if that behavior is more understood.
         minutes_til_expiration = 10
         seconds_til_expiration = minutes_til_expiration * 60
-        (ret, out) = Sysutils.system("%s x509 -in %s -noout -enddate -checkend %s" %
-                                     (OPENSSL_EXE, proxy_file, seconds_til_expiration))
+        (ret, out) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
+                                      (OPENSSL_EXE, proxy_file, seconds_til_expiration))
         if ret:
-            Results.expired_user_proxy(self, metric, proxy_file, out, minutes_til_expiration)
+            self.results.expired_user_proxy(metric, proxy_file, out, minutes_til_expiration)
 
         # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
         os.environ["X509_USER_PROXY"] = proxy_file
@@ -357,6 +363,15 @@ class RSV:
 
         return
 
+
+    def run_command(self, command, timeout=None):
+        """ Wrapper for Sysutils.system """
+        if timeout:
+            return self.sysutils.system(command, timeout)
+        else:
+            # Use the timeout declared in the config file
+            timeout = self.config.getint("rsv", "job-timeout")
+            return self.sysutils.system(command, timeout)
 
 # End of RSV class
 

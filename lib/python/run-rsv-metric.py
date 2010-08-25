@@ -91,7 +91,7 @@ def validate_config(rsv, metric):
         clean_up(1)
 
     # If appropriate, switch UID/GID
-    Sysutils.switch_user(rsv, user, desired_uid, desired_gid)
+    rsv.sysutils.switch_user(user, desired_uid, desired_gid)
 
                 
     #
@@ -167,9 +167,6 @@ def validate_config(rsv, metric):
 
 
 
-
-
-
 def ping_test(rsv, metric, options):
     """ Ping the remote host to make sure it's alive before we attempt
     to run jobs """
@@ -178,11 +175,15 @@ def ping_test(rsv, metric, options):
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
-    (ret, out) = Sysutils.system("/bin/ping -W 3 -c 1 " + options.host)
+    try:
+        cmd = "/bin/ping -W 3 -c 1 %s" % options.host
+        (ret, out) = rsv.run_command(cmd)
+    except Sysutils.TimeoutError, err:
+        rsv.results.ping_timeout(metric, cmd, err)
 
     # If we can't ping the host, don't bother doing anything else
     if ret:
-        Results.ping_failure(rsv, metric, out)
+        rsv.results.ping_failure(metric, out)
         
     rsv.log("INFO", "Ping successful", 4)
     return
@@ -203,7 +204,7 @@ def parse_job_output(rsv, metric, output):
 
 def parse_job_output_wlcg(rsv, metric, output):
     """ Parse WLCG formatted output. """
-    Results.wlcg_result(rsv, metric, output)
+    rsv.results.wlcg_result(metric, output)
 
 
 
@@ -226,7 +227,7 @@ def parse_job_output_brief(rsv, metric, output):
         details = "\n".join(lines[2:])
 
     if status and details:
-        Results.brief_result(rsv, metric, status, details)
+        rsv.results.brief_result(metric, status, details)
     else:
         rsv.log("ERROR", "Data returned from job not in 'brief' format.")
 
@@ -247,7 +248,7 @@ def execute_job(rsv, metric):
     """ Execute the job """
 
     jobmanager  = metric.config_get("jobmanager")
-    job_timeout = rsv.config.get("rsv", "job-timeout")
+    job_timeout = rsv.config.getint("rsv", "job-timeout")
 
     if not jobmanager or not job_timeout:
         rsv.log("CRITICAL", "ej1: jobmanager or job-timeout not defined in config")
@@ -308,7 +309,10 @@ def execute_job(rsv, metric):
 
     rsv.log("INFO", "Running command '%s'" % job)
 
-    (ret, out) = Sysutils.system_with_timeout(job, job_timeout)
+    try:
+        (ret, out) = rsv.run_command(job)
+    except Sysutils.TimeoutError, err:
+        rsv.results.job_timed_out(metric, job, err)
 
 
     #
@@ -320,17 +324,11 @@ def execute_job(rsv, metric):
     #
     # Handle the output
     #
-
-    # todo - (None, None) will be returned on a timeout.  This could maybe be improved
-    # by throwing an exception?  My knowledge of Python is weak here.
-    if ret == None and out == None:
-        Results.job_timed_out(rsv, metric, job, job_timeout)
-        
     if ret:
         if metric.config_val("execute", "local"):
-            Results.local_job_failed(rsv, metric, job, out)
+            rsv.results.local_job_failed(metric, job, out)
         elif metric.config_val("execute", "remote-globus"):
-            Results.remote_globus_job_failed(rsv, metric, job, out)
+            rsv.results.remote_globus_job_failed(metric, job, out)
         
     parse_job_output(rsv, metric, out)
 
