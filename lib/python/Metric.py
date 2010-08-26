@@ -13,6 +13,7 @@ class Metric:
     host = None
     config = None
     conf_dir = None
+    meta_dir = None
     executable = None
 
 
@@ -21,6 +22,7 @@ class Metric:
         self.name = metric
         self.rsv  = rsv
         self.conf_dir = os.path.join(rsv.rsv_location, "etc", "metrics")
+        self.meta_dir = os.path.join(rsv.rsv_location, "meta", "metrics")
 
         # Find executable
         self.executable = os.path.join(rsv.rsv_location, "bin", "metrics", metric)
@@ -48,10 +50,23 @@ class Metric:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
+        # Load the metric's meta information file
+        meta_file = os.path.join(self.meta_dir, self.name + ".meta")
+        if not os.path.exists(meta_file):
+            self.rsv.log("ERROR", "Metric meta file '%s' does not exist" % meta_file)
+            return
+        else:
+            try:
+                self.config.read(meta_file)
+            except ConfigParser.ParsingError, err:
+                self.rsv.log("CRITICAL", err)
+                sys.exit(1)
+
+
         # Load the metric's general configuration file
         config_file = os.path.join(self.conf_dir, self.name + ".conf")
         if not os.path.exists(config_file):
-            self.rsv.log("ERROR", "Metric config file '%s' does not exist" % config_file)
+            self.rsv.log("INFO", "Metric config file '%s' does not exist" % config_file)
             return
         else:
             try:
@@ -178,7 +193,7 @@ class Metric:
     def get_cron_entry(self):
         """ Return a dict containing the cron time information """
         try:
-            arr = self.config.get(self.name, "cron-interval").split()
+            arr = self.config.get(self.name, "default-cron-interval").split()
             cron = {}
             cron["Minute"]     = arr[0]
             cron["Hour"]       = arr[1]

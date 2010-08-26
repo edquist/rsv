@@ -36,6 +36,7 @@ class Sysutils:
             signal.signal(signal.SIGALRM, alarm_handler)
             signal.alarm(timeout)
             child = popen2.Popen4(command)
+            # TODO - evaluate ret - it might contain more data than just the return code
             ret = child.wait()
             signal.alarm(0)
         except TimeoutError:
@@ -70,6 +71,6 @@ class Sysutils:
                                  (user, desired_uid, desired_gid), 4)
 
             else:
-                # Todo - allow any user to run, but don't produce consumer records
+                # TODO - allow any user to run, but don't produce consumer records
                 self.rsv.log("ERROR", "You can only run metrics as root or the RSV user (%s)." % user, 0)
                 sys.exit(1)

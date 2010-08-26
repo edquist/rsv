@@ -69,14 +69,14 @@ class RSV:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        self.load_config_file(os.path.join(self.rsv_location, "etc", "rsv.conf"), 1)
+        self.load_config_file(os.path.join(self.rsv_location, "etc", "rsv.conf"), required=1)
 
 
 
     def load_config_file(self, config_file, required):
         """ Parse a configuration file in INI form. """
     
-        self.log("INFO", "reading configuration file " + config_file, 4)
+        self.log("INFO", "Reading configuration file " + config_file)
 
         if not os.path.exists(config_file):
             if required:
@@ -176,20 +176,21 @@ class RSV:
     def init_logging(self, verbosity):
         """ Initialize the logger """
 
-        logger = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter("%(levelname)s: %(message)s")
-        logger.setFormatter(formatter)
-        if verbosity == 0:
-            logger.setLevel(logging.CRITICAL)
-        elif verbosity == 1:
-            logger.setLevel(logging.WARNING)
-        elif verbosity == 2:
-            logger.setLevel(logging.INFO)
-        elif verbosity == 3:
-            logger.setLevel(logging.DEBUG)
-
         self.logger = logging.getLogger()
-        self.logger.addHandler(logger)
+        if verbosity == 0:
+            self.logger.setLevel(logging.CRITICAL)
+        elif verbosity == 1:
+            self.logger.setLevel(logging.WARNING)
+        elif verbosity == 2:
+            self.logger.setLevel(logging.INFO)
+        elif verbosity == 3:
+            self.logger.setLevel(logging.DEBUG)
+
+        stream = logging.StreamHandler(sys.stderr)
+        formatter = logging.Formatter("%(levelname)s: %(message)s")
+        stream.setFormatter(formatter)
+
+        self.logger.addHandler(stream)
 
 
     def log(self, level, message, indent=0):
@@ -309,7 +310,7 @@ class RSV:
 
         self.log("INFO", "Checking service certificate proxy:", 4)
 
-        hours_til_expiry = 4
+        hours_til_expiry = 6
         seconds_til_expiry = hours_til_expiry * 60 * 60
         (ret, out) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
                                       (OPENSSL_EXE, proxy, seconds_til_expiry))
@@ -321,7 +322,7 @@ class RSV:
                     hours_til_expiry, 4)
 
             grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
-            (ret, out) = self.run_command("%s -cert %s -key %s -valid 6:00 -debug -out %s" %
+            (ret, out) = self.run_command("%s -cert %s -key %s -valid 12:00 -debug -out %s" %
                                           (grid_proxy_init_exe, cert, key, proxy))
 
             if ret:
@@ -331,8 +332,6 @@ class RSV:
         # default naming scheme of /tmp/x509_u<UID>
         os.environ["X509_USER_PROXY"] = proxy
         os.environ["X509_PROXY_FILE"] = proxy
-
-        # todo - need to tell RSVv3 probes about this proxy
 
         return
 

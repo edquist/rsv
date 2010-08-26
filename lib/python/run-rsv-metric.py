@@ -337,10 +337,9 @@ def execute_job(rsv, metric):
 
 
 def clean_up(exit_code=0):
-    """ This will always be called before exiting.  Clean up any temporary
-    files """
-
-    sys.exit(exit)
+    """ Clean up any temporary files before exiting.  Currently there are none.
+    Also - make an effort """
+    sys.exit(exit_code)
 
 
 

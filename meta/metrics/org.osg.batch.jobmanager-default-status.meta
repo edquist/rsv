@@ -1,0 +1,11 @@
+[org.osg.batch.jobmanager-default-status]
+default-cron-interval = 25 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.batch.jobmanager-default-status env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

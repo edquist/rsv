@@ -1,0 +1,11 @@
+[org.osg.gratia.condor]
+default-cron-interval = 9 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.gratia.condor env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

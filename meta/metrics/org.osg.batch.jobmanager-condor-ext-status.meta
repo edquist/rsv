@@ -1,0 +1,11 @@
+[org.osg.batch.jobmanager-condor-ext-status]
+default-cron-interval = 47 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.batch.jobmanager-condor-ext-status env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

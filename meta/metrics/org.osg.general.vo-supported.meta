@@ -1,0 +1,11 @@
+[org.osg.general.vo-supported]
+default-cron-interval = 47 6,18 * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.general.vo-supported env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

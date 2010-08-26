@@ -207,7 +207,7 @@ class Condor:
 
         # TODO: Do I need to add the current PERL5LIB?  I think so, but how do I know it is valid?
 
-        # todo - form environment using config definitions
+        # TODO - form environment using config definitions
         environment = ""
         environment += "PATH=/usr/bin:/bin;"
         #environment += "PERL5LIB=%s;" % perl_lib_dirs

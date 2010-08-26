@@ -1,0 +1,11 @@
+[org.osg.certificates.cacert-expiry]
+default-cron-interval = 15 */6 * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.certificates.cacert-expiry env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

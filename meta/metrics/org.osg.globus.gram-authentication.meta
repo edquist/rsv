@@ -1,0 +1,11 @@
+[org.osg.globus.gram-authentication]
+default-cron-interval = 31 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.globus.gram-authentication env]
+PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes
