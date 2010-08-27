@@ -160,7 +160,7 @@ class Metric:
     def get_args_string(self):
         """ Build the custom parameters to the script based on the config file """
         
-        self.rsv.log("INFO", "Forming args string")
+        self.rsv.log("INFO", "Forming arguments:")
         args_section = self.name + " args"
         args = ""
         try:
@@ -175,8 +175,11 @@ class Metric:
             # We always need to tell RSVv3 about where the proxy is
             proxy_file = self.rsv.get_proxy()
             if proxy_file:
+                self.rsv.log("INFO", "Adding -x because probe version is v3", 4)
                 args += "-x %s " % proxy_file
             # TODO - --verbose?
+
+        self.rsv.log("INFO", "Arguments: '%s'" % args, 4)
 
         return args
 

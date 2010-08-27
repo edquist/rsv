@@ -27,42 +27,6 @@ VALID_OUTPUT_FORMATS = ["wlcg", "brief"]
 def process_arguments():
     """Process the command line arguments and populate global variables"""
 
-    #
-    # Define the options to parse on the command line
-    #
-    usage = "usage: %prog -m <METRIC> -u <HOST> [more options]"
-    parser = OptionParser(usage=usage)
-    parser.add_option("-m", "--metric", dest="metric", help="Metric to run")
-    parser.add_option("-u", "--host",   dest="uri",    help="Host to test")
-    parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
-                      help="Verbosity level (0-3). [Default=%default]")
-    parser.add_option("--vdt-location", dest="vdt_location",
-                      help="Supersedes VDT_LOCATION environment variable")
-
-    (options, args) = parser.parse_args()
-
-    #
-    # Do error checking on the options supplied
-    #
-    if not options.vdt_location:
-        options.vdt_location = RSV.get_osg_location()
-
-    if not options.vdt_location:
-        parser.error("You must have VDT_LOCATION set in your environment.\n" +
-                     "  Either source setup.sh or pass --vdt-location")
-
-    if not options.metric:
-        parser.error("You must provide a metric to run")
-
-
-    # Validate the host, and if necessary, split off the port
-    if not options.uri:
-        parser.error("You must provide a URI to test against")
-
-    if options.uri.find(":") == -1:
-        options.host = options.uri
-    else:
-        (options.host, options.port) = re.split(":", options.uri, 1)
 
 
     return options
@@ -269,7 +233,7 @@ def execute_job(rsv, metric):
     for var in env.keys():
         (action, value) = env[var]
         action = action.upper()
-        rsv.log("DEBUG", "Var: '%s' Action: '%s' Value: '%s'" % (var, action, value), 4)
+        rsv.log("INFO", "Var: '%s' Action: '%s' Value: '%s'" % (var, action, value), 4)
         if action == "APPEND":
             if var in os.environ:
                 os.environ[var] = os.environ[var] + ":" + value
@@ -343,33 +307,25 @@ def clean_up(exit_code=0):
 
 
 
-def main_run_rsv_metric():
+def main(rsv, options, metrics):
     """ Main subroutine: directs program flow """
 
+    # Validate the host, and if necessary, split off the port
+    if options.uri.find(":") == -1:
+        options.host = options.uri
+    else:
+        (options.host, options.port) = re.split(":", options.uri, 1)
+
     # Process the command line and initialize
-    options = process_arguments()
-    rsv = RSV.RSV(options.vdt_location, options.verbose)
-    metric = Metric.Metric(options.metric, rsv, options.uri)
-    validate_config(rsv, metric)
+    for metric_name in metrics:
+        metric = Metric.Metric(metric_name, rsv, options.uri)
+        validate_config(rsv, metric)
 
-    # Check for some basic error conditions
-    rsv.check_proxy(metric)
-    ping_test(rsv, metric, options)
-
-    # Run the job and parse the result
-    execute_job(rsv, metric)
+        # Check for some basic error conditions
+        rsv.check_proxy(metric)
+        ping_test(rsv, metric, options)
+    
+        # Run the job and parse the result
+        execute_job(rsv, metric)
 
     return
-
-
-
-if __name__ == "__main__":
-    PROGNAME = os.path.basename(sys.argv[0])
-    if PROGNAME == 'run-rsv-metric' or PROGNAME == 'run-rsv-metric.py':
-        if not main_run_rsv_metric():
-            sys.exit(1)
-        else:
-            sys.exit(0)
-    else:
-        print "Wrong invocation!"
-        sys.exit(1)

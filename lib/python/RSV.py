@@ -308,7 +308,7 @@ class RSV:
     def renew_service_certificate_proxy(self, metric, cert, key, proxy):
         """ Check the service certificate.  If it is expiring soon, renew it. """
 
-        self.log("INFO", "Checking service certificate proxy:", 4)
+        self.log("INFO", "Using service certificate proxy", 4)
 
         hours_til_expiry = 6
         seconds_til_expiry = hours_til_expiry * 60 * 60
@@ -340,7 +340,7 @@ class RSV:
     def check_user_proxy(self, metric, proxy_file):
         """ Check that a proxy file is valid """
 
-        self.log("INFO", "Checking user proxy", 4)
+        self.log("INFO", "Using user proxy", 4)
 
         # Check that the file exists on disk
         if not os.path.exists(proxy_file):

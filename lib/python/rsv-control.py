@@ -8,20 +8,22 @@ from optparse import OptionParser
 # Custom RSV libraries
 import RSV
 import rc_metric
+import run_metric
 
 import pdb
 
 
 def process_options(arguments=None):
-    usage = """usage: rsv-control [ --verbose ] 
-      --help | -h 
-      --version
+    usage = """usage: rsv-control [ --verbose <level> ]
+      --run --host <HOST> METRIC [METRIC ...]
       --list [ --wide ] [ --all ] [ <pattern> ]
       --job-list [ --host <host-name> ]
       --on      [METRIC|CONSUMER ...]
       --off     [METRIC|CONSUMER ...]
       --enable  [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
       --disable [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
+      --help | -h 
+      --version
     """
 
     version = "rsv-control 0.14"
@@ -42,6 +44,8 @@ def process_options(arguments=None):
                       help="Wide list display to avoid truncation in metric listing")
     parser.add_option("-a", "--all", action="store_true", dest="list_all", default=False,
                       help="Display all metrics, including metrics not enabled on any host.")
+    parser.add_option("-r", "--run", action="store_true", dest="run", default=False,
+                      help="Run the supplied list of metrics against the specified host.")
     parser.add_option("--on", action="store_true", dest="on", default=False,
                       help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
     parser.add_option("--off", action="store_true", dest="off", default=False,
@@ -50,7 +54,7 @@ def process_options(arguments=None):
                       help="Enable metric. May be specified multiple times.")
     parser.add_option("--disable", action="store_true", dest="disable", default=False,
                       help="Disable metric. May be specified multiple times.")
-    parser.add_option("--host", dest="host", default=None,
+    parser.add_option("-u", "--host", dest="host", default=None,
                       help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
 
     if arguments == None:
@@ -70,13 +74,25 @@ def process_options(arguments=None):
                      "pass the --vdt-location command line option.")
 
     # Check that we got exactly one command
-    number_of_commands = len([i for i in [options.enable, options.disable, options.on,
+    number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
                                           options.off, options.list, options.job_list] if i])
     
     if number_of_commands > 1:
-        parser.error("You can use only one of list, enable, disable, on, or off.")
+        parser.error("You can use only one of run, list, enable, disable, on, or off.")
     if number_of_commands == 0:
         parser.error("You must specify one command.")
+
+    # Check other conditions
+    if options.run:
+        if not options.host:
+            parser.error("You must provide a host to run metrics against.")
+        else:
+            # Set options.uri for run_metric.py code
+            options.uri = options.host
+
+        if not args:
+            parser.error("You must provide metrics to run")
+
 
     return options, args
 
@@ -97,6 +113,8 @@ def main_rsv_control():
             return rc_metric.list_metrics(rsv, options, "")
         else:
             return rc_metric.list_metrics(rsv, options, args[0])
+    elif options.run:
+        run_metric.main(rsv, options, args)
     elif options.job_list:
         rc_metric.job_list(rsv, options.host)
     elif options.on:

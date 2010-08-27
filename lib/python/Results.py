@@ -69,7 +69,7 @@ class Results:
             local_timestamp = utc_to_local(match.group(1))
             local_output = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_output)
 
-        self.print_result(metric, output, local_output)
+        return self.print_result(metric, output, local_output)
 
 
     def brief_result(self, metric, status, data):
@@ -98,7 +98,7 @@ class Results:
         utc_summary   = self.get_summary(metric, status, this_host, utc_timestamp,   data)
         local_summary = self.get_summary(metric, status, this_host, local_timestamp, data)
 
-        self.print_result(metric, utc_summary, local_summary)
+        return self.print_result(metric, utc_summary, local_summary)
 
 
 
@@ -114,7 +114,7 @@ class Results:
         # 
         # Print the local summary to the screen
         #
-        self.rsv.log("INFO", "\n\n") # separate final output from debug output
+        self.rsv.log("INFO", "Result:\n") # separate final output from debug output
         self.rsv.echo(local_summary)
 
         #
@@ -122,8 +122,7 @@ class Results:
         # that just running a probe successfully should be a 0 exit status, but
         # maybe there should be a different mode?
         #
-        # TODO - call clean_up?
-        sys.exit(0)
+        return 0
 
 
 
