@@ -231,11 +231,15 @@ def start_all_jobs(rsv, condor):
                     num_errors += 1
 
     # Start the consumers
-    rsv.echo("Starting consumers.")
-    for consumer_name in rsv.get_enabled_consumers():
-        consumer = Consumer.Consumer(consumer_name, rsv)
-        if not condor.start_consumer(consumer):
-            num_errors += 1
+    enabled_consumers = rsv.get_enabled_consumers()
+    if len(enabled_consumers) > 0:
+        rsv.echo("Starting %s consumers." % len(enabled_consumers))
+        for consumer_name in enabled_consumers:
+            consumer = Consumer.Consumer(consumer_name, rsv)
+            if not condor.start_consumer(consumer):
+                num_errors += 1
+    else:
+        rsv.echo("No consumers are enabled.  Jobs will run but records will not be generated.")
 
     if num_errors > 0:
         return False

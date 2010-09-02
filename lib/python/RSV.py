@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-""" Shared code between rsv-control and run-rsv-metric """
-
 # System libraries
 import os
 import re
@@ -14,6 +12,8 @@ import Host
 import Metric
 import Results
 import Sysutils
+
+import pdb
 
 OPENSSL_EXE = "/usr/bin/openssl"
 
@@ -246,11 +246,11 @@ class RSV:
 
     def get_enabled_consumers(self):
         """ Return a list of all consumers enabled in rsv.conf """
-        
+
         try:
             consumers = []
             for consumer in re.split("\s*,\s*", self.config.get("rsv", "consumers")):
-                if not consumer.isspace():
+                if consumer and not consumer.isspace():
                     consumers.append(consumer)
             return consumers
         except ConfigParser.NoOptionError:
@@ -260,7 +260,7 @@ class RSV:
 
     def get_wrapper(self):
         """ Return the wrapper script that will run the metrics """
-        return os.path.join(self.rsv_location, "bin", "run-rsv-metric")
+        return os.path.join(self.rsv_location, "bin", "rsv-control")
 
 
     def get_proxy(self):
