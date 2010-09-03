@@ -148,13 +148,15 @@ class RSV:
     def get_hosts(self):
         """ Return a list of hosts that have configuration files """
 
+        special_config_files = ["rsv.conf", "consumers.conf"]
+
         conf_dir = os.path.join(self.rsv_location, "etc")
         try:
             config_files = os.listdir(conf_dir)
             hosts = []
             for config_file in config_files:
                 # Somewhat arbitrary pattern, but it won't match '.', '..', or '.svn'
-                if re.search("\.conf$", config_file) and config_file != "rsv.conf":
+                if re.search("\.conf$", config_file) and config_file not in special_config_files:
                     host = re.sub("\.conf$", "", config_file)
                     hosts.append(host)
             return hosts
@@ -315,8 +317,8 @@ class RSV:
 
         hours_til_expiry = 6
         seconds_til_expiry = hours_til_expiry * 60 * 60
-        (ret, out) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
-                                      (OPENSSL_EXE, proxy, seconds_til_expiry))
+        (ret, out, err) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
+                                           (OPENSSL_EXE, proxy, seconds_til_expiry))
 
         if ret == 0:
             self.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
@@ -325,11 +327,11 @@ class RSV:
                     hours_til_expiry, 4)
 
             grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
-            (ret, out) = self.run_command("%s -cert %s -key %s -valid 12:00 -debug -out %s" %
-                                          (grid_proxy_init_exe, cert, key, proxy))
+            (ret, out, err) = self.run_command("%s -cert %s -key %s -valid 12:00 -debug -out %s" %
+                                               (grid_proxy_init_exe, cert, key, proxy))
 
             if ret:
-                self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out)
+                self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
 
         # Globus needs help finding the service proxy since it probably does not have the
         # default naming scheme of /tmp/x509_u<UID>

@@ -143,38 +143,38 @@ def ping_test(rsv, metric, options):
     # the remote host, we don't care about the latency unless it exceeds the timeout
     try:
         cmd = "/bin/ping -W 3 -c 1 %s" % options.host
-        (ret, out) = rsv.run_command(cmd)
+        (ret, out, err) = rsv.run_command(cmd)
     except Sysutils.TimeoutError, err:
         rsv.results.ping_timeout(metric, cmd, err)
 
     # If we can't ping the host, don't bother doing anything else
     if ret:
-        rsv.results.ping_failure(metric, out)
+        rsv.results.ping_failure(metric, out, err)
         
     rsv.log("INFO", "Ping successful", 4)
     return
 
 
 
-def parse_job_output(rsv, metric, output):
+def parse_job_output(rsv, metric, stdout, stderr):
     """ Parse the job output from the worker script """
 
     if(metric.config_val("output-format", "wlcg")):
-        parse_job_output_wlcg(rsv, metric, output)
+        parse_job_output_wlcg(rsv, metric, stdout, stderr)
     elif(metric.config_val("output-format", "brief")):
-        parse_job_output_brief(rsv, metric, output)
+        parse_job_output_brief(rsv, metric, stdout, stderr)
     else:
         rsv.log("ERROR", "output format unknown")
 
         
 
-def parse_job_output_wlcg(rsv, metric, output):
+def parse_job_output_wlcg(rsv, metric, stdout, stderr):
     """ Parse WLCG formatted output. """
-    rsv.results.wlcg_result(metric, output)
+    rsv.results.wlcg_result(metric, stdout, stderr)
 
 
 
-def parse_job_output_brief(rsv, metric, output):
+def parse_job_output_brief(rsv, metric, stdout, stderr):
     """ Parse the "brief" job output.  This format consists of just a keyword, status
     and details.  Here is an example:
     JOB RESULTS:
@@ -186,14 +186,14 @@ def parse_job_output_brief(rsv, metric, output):
     status = None
     details = None
 
-    lines = output.split("\n")
+    lines = stdout.split("\n")
 
     if lines[0] == "JOB RESULTS:":
         status = lines[1].strip()
         details = "\n".join(lines[2:])
 
     if status and details:
-        rsv.results.brief_result(metric, status, details)
+        rsv.results.brief_result(metric, status, details, stderr)
     else:
         rsv.log("ERROR", "Data returned from job not in 'brief' format.")
 
@@ -202,11 +202,11 @@ def parse_job_output_brief(rsv, metric, output):
             trim_length = rsv.config.get("rsv", "details-data-trim-length")
             rsv.log("Displaying first %s bytes of output (use -v3 for full output)" %
                     trim_length, 1)
-            output = output[:trim_length]
+            stdout = stdout[:trim_length]
         else:
             rsv.log("DEBUG", "Displaying full output received from command:")
             
-        rsv.echo(output)
+        rsv.echo(stdout)
         sys.exit(1)
 
 
@@ -276,7 +276,7 @@ def execute_job(rsv, metric):
     rsv.log("INFO", "Running command '%s'" % job)
 
     try:
-        (ret, out) = rsv.run_command(job)
+        (ret, out, err) = rsv.run_command(job)
     except Sysutils.TimeoutError, err:
         rsv.results.job_timed_out(metric, job, err)
 
@@ -292,11 +292,11 @@ def execute_job(rsv, metric):
     #
     if ret:
         if metric.config_val("execute", "local"):
-            rsv.results.local_job_failed(metric, job, out)
+            rsv.results.local_job_failed(metric, job, out, err)
         elif metric.config_val("execute", "remote-globus"):
-            rsv.results.remote_globus_job_failed(metric, job, out)
+            rsv.results.remote_globus_job_failed(metric, job, out, err)
         
-    parse_job_output(rsv, metric, out)
+    parse_job_output(rsv, metric, out, err)
 
     return
 

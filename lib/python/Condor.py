@@ -6,6 +6,8 @@ import time
 import commands
 from time import strftime
 
+import pdb
+
 import Host
 
 class Condor:
@@ -216,7 +218,7 @@ class Condor:
 
         condor_id = metric.get_unique_name()
 
-        arguments = "-r -m %s -u %s" % (metric.name, metric.host)
+        arguments = "-r -u %s %s" % (metric.host, metric.name)
 
         submit = ""
         submit += "######################################################################\n"
@@ -303,7 +305,7 @@ class Condor:
 
             next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
 
-            match = re.search("-m ([\w.-]+)", classad["Args"])
+            match = re.search("\s([\w.-]+)\s*\"", classad["Args"])
             metric = "UNKNOWN?"
             if match:
                 metric = match.group(1)

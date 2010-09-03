@@ -46,12 +46,10 @@ def list_metrics(rsv, options, pattern):
                 if pattern and not re.search(pattern, metric):
                     continue
                 
-                # todo - add metricType here
                 metric_type = metrics[metric].get_type()
                 table.addToBuffer(metric, metric_type)
                 num_metrics_displayed += 1
         else:
-            # todo - add message?
             pass
 
         # We don't skip this host earlier in the loop so that we can get

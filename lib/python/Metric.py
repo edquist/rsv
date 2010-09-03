@@ -177,7 +177,8 @@ class Metric:
             if proxy_file:
                 self.rsv.log("INFO", "Adding -x because probe version is v3", 4)
                 args += "-x %s " % proxy_file
-            # TODO - --verbose?
+                self.rsv.log("INFO", "Adding --verbose because probe version is v3", 4)
+                args += "--verbose "
 
         self.rsv.log("INFO", "Arguments: '%s'" % args, 4)
 

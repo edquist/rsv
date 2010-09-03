@@ -51,7 +51,7 @@ class Results:
         self.rsv = rsv
 
 
-    def wlcg_result(self, metric, output):
+    def wlcg_result(self, metric, record, stderr):
         """ Handle WLCG formatted output """
 
         # Trim detailsData using details-data-trim-length
@@ -63,16 +63,16 @@ class Results:
             # TODO - trim detailsData
 
         # Create a record with a local timestamp.
-        local_output = output
+        local_output = record
         match = re.search("timestamp: ([\w\:\-]+)", local_output)
         if match:
             local_timestamp = utc_to_local(match.group(1))
             local_output = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_output)
 
-        return self.print_result(metric, output, local_output)
+        return self.print_result(metric, record, local_output, stderr)
 
 
-    def brief_result(self, metric, status, data):
+    def brief_result(self, metric, status, data, stderr):
         """ Handle the "brief" result output """
 
         self.rsv.log("DEBUG", "In brief_result()")
@@ -98,11 +98,11 @@ class Results:
         utc_summary   = self.get_summary(metric, status, this_host, utc_timestamp,   data)
         local_summary = self.get_summary(metric, status, this_host, local_timestamp, data)
 
-        return self.print_result(metric, utc_summary, local_summary)
+        return self.print_result(metric, utc_summary, local_summary, stderr)
 
 
 
-    def print_result(self, metric, utc_summary, local_summary):
+    def print_result(self, metric, utc_summary, local_summary, stderr):
         """ Generate a result record for each consumer, and print to the screen """
 
         #
@@ -114,6 +114,7 @@ class Results:
         # 
         # Print the local summary to the screen
         #
+        self.rsv.log("DEBUG", "STDERR from metric:\n%s\n" % stderr)
         self.rsv.log("INFO", "Result:\n") # separate final output from debug output
         self.rsv.echo(local_summary)
 
@@ -242,14 +243,15 @@ class Results:
         self.brief_result(metric, status, data)
 
 
-    def service_proxy_renewal_failed(self, metric, cert, key, proxy, openssl_output):
+    def service_proxy_renewal_failed(self, metric, cert, key, proxy, openssl_stdout, openssl_error):
         """ We failed to renew the service proxy using openssl """
 
         status = "CRITICAL"
         data   = "Proxy file '%s' could not be renewed.\n" % proxy
         data  += "Service cert - %s\n" % cert
         data  += "Service key  - %s\n" % key
-        data  += "openssl output:\n%s" % openssl_output
+        data  += "openssl stdout:\n%s\n" % openssl_stdout
+        data  += "openssl stderr:\n%s\n" % openssl_stderr
 
         self.brief_result(metric, status, data)
 
@@ -266,7 +268,7 @@ class Results:
         self.brief_result(metric, status, data)
 
 
-    def ping_failure(self, metric, output):
+    def ping_failure(self, metric, stdout, stderr):
         """ We cannot ping the remote host """
 
         status = "CRITICAL"
@@ -274,27 +276,30 @@ class Results:
         data  += "Troubleshooting:\n"
         data  += "  Is the network available?\n"
         data  += "  Is the remote host available?\n\n"
-        data  += "Ping output:\n%s" % output
+        data  += "Ping stdout:\n%s\n" % stdout
+        data  += "Pint stderr:\n%s\n" % stderr
 
         self.brief_result(metric, status, data)
 
 
-    def local_job_failed(self, metric, command, output):
+    def local_job_failed(self, metric, command, stdout, stderr):
         """ Failed to run a metric of type local """
         status = "CRITICAL"
         data   = "Failed to run local job\n\n"
         data  += "Job run:\n%s\n\n" % command
-        data  += "Output:\n%s" % output
+        data  += "Stdout:\n%s\n" % stdout
+        data  += "Stderr:\n%s\n" % stderr
 
         self.brief_result(metric, status, data)
 
 
-    def remote_globus_job_failed(self, metric, command, output):
+    def remote_globus_job_failed(self, metric, command, stdout, stderr):
         """ Failed to run a metric of type remote-globus """
         status = "CRITICAL"
         data   = "Failed to run job via globus-job-run\n\n"
         data  += "Job run:\n%s\n\n" % command
-        data  += "Output:\n%s" % output
+        data  += "Stdout:\n%s\n" % stdout
+        data  += "Stderr:\n%s\n" % stderr
 
         self.brief_result(metric, status, data)
 

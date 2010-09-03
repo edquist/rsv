@@ -35,8 +35,7 @@ class Sysutils:
         try:
             signal.signal(signal.SIGALRM, alarm_handler)
             signal.alarm(timeout)
-            child = popen2.Popen4(command)
-            # TODO - evaluate ret - it might contain more data than just the return code
+            child = popen2.Popen3(command, capturestderr=1)
             ret = child.wait()
             signal.alarm(0)
         except TimeoutError:
@@ -45,7 +44,8 @@ class Sysutils:
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
         out = child.fromchild.read()
-        return (ret, out)
+        err = child.childerr.read()
+        return (ret, out, err)
 
 
     def switch_user(self, user, desired_uid, desired_gid):
