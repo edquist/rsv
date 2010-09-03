@@ -12,6 +12,7 @@ import Host
 import Metric
 import Results
 import Sysutils
+import Consumer
 
 import pdb
 
@@ -70,7 +71,8 @@ class RSV:
                     self.config.set(section, item, defaults[section][item])
 
         self.load_config_file(os.path.join(self.rsv_location, "etc", "rsv.conf"), required=1)
-
+        self.load_config_file(os.path.join(self.rsv_location, "etc", "consumers.conf"), required=0)
+        return
 
 
     def load_config_file(self, config_file, required):
@@ -249,9 +251,10 @@ class RSV:
 
         try:
             consumers = []
-            for consumer in re.split("\s*,\s*", self.config.get("rsv", "consumers")):
+            for consumer in re.split("\s*,\s*", self.config.get("consumers", "enabled")):
                 if consumer and not consumer.isspace():
-                    consumers.append(consumer)
+                    consumer_obj = Consumer.Consumer(consumer, self)
+                    consumers.append(consumer_obj)
             return consumers
         except ConfigParser.NoOptionError:
             self.log("WARNING", "No consumers defined in rsv.conf")

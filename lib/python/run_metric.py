@@ -91,13 +91,15 @@ def validate_config(rsv, metric):
     # warn if consumers are missing
     #
     try:
-        consumers = rsv.config.get("rsv", "consumers")
+        consumers = rsv.config.get("consumers", "enabled")
         rsv.log("INFO", "Registered consumers: %s" % consumers, 0)
-    except ConfigParser.NoOptionError:
-        rsv.config.set("rsv", "consumers", "")
-        rsv.log("WARNING", "no consumers are registered in rsv.conf.  This means that" +
-                "records will not be sent to a central collector for availability" +
-                "statistics.")
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+        if not rsv.config.has_section("consumers"):
+            rsv.config.add_section("consumers")
+        rsv.config.set("consumers", "enabled", "")
+        rsv.log("WARNING", "no consumers are registered in consumers.conf.  This " +
+                "means that records will not be sent to a central collector for " +
+                "availability statistics.")
 
 
     #

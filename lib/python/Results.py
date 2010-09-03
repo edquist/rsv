@@ -157,19 +157,17 @@ class Results:
         """ Make a file in the consumer records area """
 
         # Check/create the directory that we'll put record into
-        output_dir = os.path.join(self.rsv.rsv_location, "output", consumer)
+        output_dir = os.path.join(self.rsv.rsv_location, "output", consumer.name)
 
         if not self.validate_directory(output_dir):
-            self.rsv.log("WARNING", "Cannot write record for consumer '%s'" % consumer)
+            self.rsv.log("WARNING", "Cannot write record for consumer '%s'" % consumer.name)
         else:
             prefix = metric.name + "."
             (file_handle, file_path) = tempfile.mkstemp(prefix=prefix, dir=output_dir)
 
-            self.rsv.log("INFO", "Creating record for %s consumer at '%s'" % (consumer, file_path))
+            self.rsv.log("INFO", "Creating record for %s consumer at '%s'" % (consumer.name, file_path))
 
-            # TODO - allow for consumer config files that specify which time to use
-            # for now we'll just give the html-consumer local time, and UTC to the rest
-            if consumer == "html-consumer":
+            if consumer.wants_local_time():
                 os.write(file_handle, local_summary)
             else:
                 os.write(file_handle, utc_summary)

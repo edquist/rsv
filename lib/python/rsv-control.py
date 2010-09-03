@@ -20,8 +20,8 @@ def process_options(arguments=None):
       --job-list [ --host <host-name> ]
       --on      [METRIC|CONSUMER ...]
       --off     [METRIC|CONSUMER ...]
-      --enable  [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
-      --disable [--host <host-name>] METRIC|CONSUMER [METRIC|CONSUMER ...]
+      --enable  --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
+      --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
       --help | -h 
       --version
     """

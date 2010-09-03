@@ -91,6 +91,19 @@ class Consumer:
         return self.name
 
 
+    def wants_local_time(self):
+        """ Determine if the consumer should get a record with local time instead
+        of GMT """
+
+        try:
+            value = self.rsv.config.get(self.name, "timestamp")
+            if value.lower() == "local":
+                return True
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            return False
+
+        return False
+
 
 def get_consumer_defaults(consumer_name):
     """ Load consumer default values """

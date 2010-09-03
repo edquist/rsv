@@ -384,8 +384,8 @@ class Condor:
                 enabled_consumers = self.rsv.get_enabled_consumers()
                 missing_consumers = []
                 for consumer in enabled_consumers:
-                    if consumer not in running_consumers:
-                        missing_consumers.append(consumer)
+                    if consumer.name not in running_consumers:
+                        missing_consumers.append(consumer.name)
 
                 if missing_consumers:
                     self.rsv.echo("\nWARNING: The following consumers are enabled but not running:\n%s\n" %
