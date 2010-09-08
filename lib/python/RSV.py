@@ -22,7 +22,9 @@ class RSV:
     """ Class to load and store configuration information about this install
     of RSV.  This could be replaced with a singleton pattern to reduce the need
     to pass the instance around in functions. """
-    
+
+    consumer_config_file = None
+    consumer_config = None
     vdt_location = None
     rsv_location = None
     sysutils = None
@@ -54,13 +56,13 @@ class RSV:
         self.init_logging(verbosity)
 
         # Setup the initial configuration
-        self.config = ConfigParser.RawConfigParser()
-        self.config.optionxform = str
         self.setup_config()
-
+        self.setup_consumer_config()
 
     def setup_config(self):
         """ Load configuration """
+        self.config = ConfigParser.RawConfigParser()
+        self.config.optionxform = str # make keys case-insensitive
         defaults = get_rsv_defaults()
         if defaults:
             for section in defaults.keys():
@@ -70,14 +72,23 @@ class RSV:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        self.load_config_file(os.path.join(self.rsv_location, "etc", "rsv.conf"), required=1)
-        self.load_config_file(os.path.join(self.rsv_location, "etc", "consumers.conf"), required=0)
+        self.load_config_file(self.config, os.path.join(self.rsv_location, "etc", "rsv.conf"),
+                              required=1)
         return
 
 
-    def load_config_file(self, config_file, required):
+    def setup_consumer_config(self):
+        """ Load configuration """
+        self.consumer_config_file = os.path.join(self.rsv_location, "etc", "consumers.conf")
+        self.consumer_config = ConfigParser.RawConfigParser()
+        self.consumer_config.optionxform = str # make keys case-insensitive
+        self.load_config_file(self.consumer_config, self.consumer_config_file, required=0)
+        return
+
+
+    def load_config_file(self, config_obj, config_file, required):
         """ Parse a configuration file in INI form. """
-    
+
         self.log("INFO", "Reading configuration file " + config_file)
 
         if not os.path.exists(config_file):
@@ -89,7 +100,7 @@ class RSV:
                 return
 
         try:
-            self.config.read(config_file)
+            config_obj.read(config_file)
         except ConfigParser.ParsingError, err:
             self.log("CRITICAL", err)
             sys.exit(1)
@@ -230,14 +241,15 @@ class RSV:
             print message
         
 
-
     def get_metric_log_dir(self):
         """ Return the directory to store condor log/out/err files for metrics """
         return os.path.join(self.rsv_location, "logs", "metrics")
 
+
     def get_consumer_log_dir(self):
         """ Return the directory to store condor log/out/err files for consumers """
         return os.path.join(self.rsv_location, "logs", "consumers")
+
 
     def get_user(self):
         """ Return the user defined in rsv.conf """
@@ -248,19 +260,90 @@ class RSV:
             return ""
 
 
-    def get_enabled_consumers(self):
-        """ Return a list of all consumers enabled in rsv.conf """
+    def get_enabled_consumers(self, want_objects=1):
+        """ Return a list of all consumers enabled in consumers.conf """
 
         try:
             consumers = []
-            for consumer in re.split("\s*,\s*", self.config.get("consumers", "enabled")):
+            for consumer in re.split("\s*,\s*", self.consumer_config.get("consumers", "enabled")):
                 if consumer and not consumer.isspace():
-                    consumer_obj = Consumer.Consumer(consumer, self)
-                    consumers.append(consumer_obj)
+                    if want_objects:
+                        consumer_obj = Consumer.Consumer(consumer, self)
+                        consumers.append(consumer_obj)
+                    else:
+                        consumers.append(consumer)
             return consumers
         except ConfigParser.NoOptionError:
-            self.log("WARNING", "No consumers defined in rsv.conf")
+            self.log("WARNING", "No enabled consumers defined in consumers.conf")
             return []
+
+
+    def set_enabled_consumers(self, consumer_list):
+        """ Set the list of consumers enabled in consumers.conf """
+
+        enabled_consumers = ", ".join(consumer_list)
+
+        if not self.consumer_config.has_section("consumers"):
+            self.consumer_config.add_section("consumers")
+
+        self.consumer_config.set("consumers", "enabled", enabled_consumers)
+        return
+
+
+    def is_consumer_enabled(self, consumer):
+        """ Return true if consumer is enabled, false otherwise """
+
+        if consumer in self.get_enabled_consumers(want_objects=0):
+            return True
+        else:
+            return False
+
+
+    def enable_consumer(self, consumer_name):
+        """ Add a consumer to the list of consumers that are enabled in consumers.conf """
+
+        enabled_consumers = self.get_enabled_consumers(want_objects=0)
+        if consumer_name in enabled_consumers:
+            # Already enabled, nothing needs to be done
+            return
+        else:
+            enabled_consumers.append(consumer_name)
+            self.set_enabled_consumers(enabled_consumers)
+            self.write_consumer_config_file()
+
+        return
+
+
+    def disable_consumer(self, consumer_name):
+        """ Add a consumer to the list of consumers that are disabled in consumers.conf """
+
+        enabled_consumers = self.get_enabled_consumers(want_objects=0)
+        if consumer_name not in enabled_consumers:
+            # Already disabled, nothing needs to be done
+            return
+        else:
+            # Just in case it's listed multiple times, loop the remove statement
+            while consumer_name in enabled_consumers:
+                enabled_consumers.remove(consumer_name)
+
+            self.set_enabled_consumers(enabled_consumers)
+            self.write_consumer_config_file()
+
+        return
+
+
+    def write_consumer_config_file(self):
+        """ Write out the consumers.conf file to disk """
+
+        self.log("INFO", "Writing consumer configuration file '%s'" % self.consumer_config_file)
+        
+        if not os.path.exists(self.consumer_config_file):
+            self.rsv.echo("Creating configuration file '%s'" % self.consumer_config_file)
+            
+        config_fp = open(self.consumer_config_file, 'w')
+        self.consumer_config.write(config_fp)
+        config_fp.close()
+
 
 
     def get_wrapper(self):
@@ -376,6 +459,35 @@ class RSV:
             # Use the timeout declared in the config file
             timeout = self.config.getint("rsv", "job-timeout")
             return self.sysutils.system(command, timeout)
+
+
+    def get_vdt_pythonpath(self):
+        """ Return the PYTHONPATH for Python modules installed by the VDT """
+        self.log("DEBUG", "Determining VDT PYTHONPATH")
+        command = os.path.join(self.vdt_location, "python", "python-setup.py")
+        (ret, out, err) = self.run_command(command)
+        if ret != 0:
+            self.log("WARNING", "Error determining VDT PYTHONPATH\nSTDOUT - %s\nSTDERR - %s" %
+                     (out, err))
+            return ""
+        else:
+            self.log("INFO", "VDT PYTHONPATH = %s" % out)
+            return out
+
+
+    def get_vdt_perl5lib(self):
+        """ Return the PERL5LIB for Perl modules installed by the VDT """
+        self.log("DEBUG", "Determining VDT PERL5LIB")
+        command = os.path.join(self.vdt_location, "perl", "perl-setup.pl")
+        (ret, out, err) = self.run_command(command)
+        if ret != 0:
+            self.log("WARNING", "Error determining VDT PERL5LIB\nSTDOUT - %s\nSTDERR - %s" %
+                     (out, err))
+            return ""
+        else:
+            self.log("INFO", "VDT PERL5LIB = %s" % out)
+            return out
+
 
 # End of RSV class
 

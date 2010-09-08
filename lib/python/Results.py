@@ -218,7 +218,7 @@ class Results:
         data  += "service_cert, service_key, service_proxy\n\n"
         data  += "To use a user certificate, set the following variable:\n"
         data  += "proxy_file"
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
 
@@ -227,7 +227,7 @@ class Results:
 
         status = "CRITICAL"
         data   = "proxy_file is set in rsv.conf, but the file '%s' does not exist." % proxy_file
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
 
@@ -240,10 +240,10 @@ class Results:
                  (proxy_file, minutes_til_expiration)
         data  += "openssl output:\n%s" % openssl_output
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
-    def service_proxy_renewal_failed(self, metric, cert, key, proxy, openssl_stdout, openssl_error):
+    def service_proxy_renewal_failed(self, metric, cert, key, proxy, openssl_stdout, openssl_stderr):
         """ We failed to renew the service proxy using openssl """
 
         status = "CRITICAL"
@@ -253,7 +253,7 @@ class Results:
         data  += "openssl stdout:\n%s\n" % openssl_stdout
         data  += "openssl stderr:\n%s\n" % openssl_stderr
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
     def ping_timeout(self, metric, command, error):
@@ -265,7 +265,7 @@ class Results:
         data  += "Troubleshooting:\n"
         data  += "  Manually run the ping command: '%s'\n" % command
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
     def ping_failure(self, metric, stdout, stderr):
@@ -279,7 +279,7 @@ class Results:
         data  += "Ping stdout:\n%s\n" % stdout
         data  += "Pint stderr:\n%s\n" % stderr
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
     def local_job_failed(self, metric, command, stdout, stderr):
@@ -290,7 +290,7 @@ class Results:
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
     def remote_globus_job_failed(self, metric, command, stdout, stderr):
@@ -301,7 +301,7 @@ class Results:
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")
 
 
     def job_timed_out(self, metric, command, err):
@@ -310,4 +310,4 @@ class Results:
         data   = "Timeout hit - %s\n\n" % err
         data  += "Job run:\n%s\n\n" % command
 
-        self.brief_result(metric, status, data)
+        self.brief_result(metric, status, data, stderr="")

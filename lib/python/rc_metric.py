@@ -194,9 +194,9 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
                 elif action == "stop":
                     num_errors += stop_consumer(rsv, condor, consumer)
                 elif action == "enable":
-                    write_config_file |= enable_consumer(rsv, consumer)
+                    enable_consumer(rsv, consumer)
                 elif action == "disable":
-                    write_config_file |= disable_consumer(rsv, consumer)
+                    disable_consumer(rsv, consumer)
 
         if write_config_file:
             host.write_config_file()
@@ -315,12 +315,14 @@ def enable_metric(rsv, metric, host):
     
         
 def enable_consumer(rsv, consumer):
-    """ Enable the specified consumer.  NOT YET IMPLEMENTED """
+    """ Enable the specified consumer. """
     
     rsv.echo("Enabling consumer %s" % consumer.name)
-    rsv.echo("Enabling consumers is not yet implemented.  Edit rsv.conf directly.")
 
-    return False
+    if rsv.is_consumer_enabled(consumer.name):
+        rsv.echo("   Consumer already enabled")
+    else:
+        rsv.enable_consumer(consumer.name)
 
 
 def disable_metric(rsv, metric, host):
@@ -340,8 +342,10 @@ def disable_consumer(rsv, consumer):
     """ Disable the specified consumer """
 
     rsv.echo("Disabling consumer %s" % consumer.name)
-    rsv.echo("Disabling consumers is not yet implemented.  Edit rsv.conf directly.")
 
-    return False
+    if not rsv.is_consumer_enabled(consumer.name):
+        rsv.echo("   Consumer already disabled")
+    else:
+        rsv.disable_consumer(consumer.name)
 
 

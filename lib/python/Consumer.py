@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import re
 import sys
 import ConfigParser
 
@@ -11,6 +12,7 @@ class Consumer:
     name = None
     config = None
     conf_dir = None
+    meta_dir = None
     executable = None
 
 
@@ -19,6 +21,7 @@ class Consumer:
         self.name = consumer
         self.rsv  = rsv
         self.conf_dir = os.path.join(rsv.rsv_location, "etc", "consumers")
+        self.meta_dir = os.path.join(rsv.rsv_location, "meta", "consumers")
 
         # Find executable
         self.executable = os.path.join(rsv.rsv_location, "bin", "consumers", consumer)
@@ -29,7 +32,7 @@ class Consumer:
         # Load configuration
         defaults = get_consumer_defaults(consumer)
         self.config = ConfigParser.RawConfigParser()
-        self.config.optionxform = str
+        self.config.optionxform = str # make keys case-insensitive
         self.load_config(defaults)
 
 
@@ -44,7 +47,21 @@ class Consumer:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        # Load the metric's general configuration file
+        # Load the consumer's meta file
+        meta_file = os.path.join(self.meta_dir, self.name + ".meta")
+        if not os.path.exists(meta_file):
+            self.rsv.log("INFO", "Consumer meta file '%s' does not exist" % meta_file)
+            return
+        else:
+            try:
+                self.config.read(meta_file)
+            except ConfigParser.ParsingError, err:
+                self.rsv.log("CRITICAL", err)
+                # TODO - return exception, don't exit
+                sys.exit(1)
+
+        # Load the consumer's general configuration file
+        # Load this after the meta file so it can override that file
         config_file = os.path.join(self.conf_dir, self.name + ".conf")
         if not os.path.exists(config_file):
             self.rsv.log("INFO", "Consumer config file '%s' does not exist" % config_file)
@@ -96,7 +113,7 @@ class Consumer:
         of GMT """
 
         try:
-            value = self.rsv.config.get(self.name, "timestamp")
+            value = self.config.get(self.name, "timestamp")
             if value.lower() == "local":
                 return True
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
@@ -104,6 +121,20 @@ class Consumer:
 
         return False
 
+
+    def get_environment(self):
+        """ Return the environment string from the configuration file after making
+        necessary substitutions. """
+
+        try:
+            env = self.config.get(self.name, "environment")
+            env = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, env)
+            env = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), env)
+            env = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), env)
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            return ""
+
+        return env
 
 def get_consumer_defaults(consumer_name):
     """ Load consumer default values """

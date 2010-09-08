@@ -132,6 +132,7 @@ class Condor:
 
         # Generate a submission file
         submit_file_contents = self.build_consumer_submit_file(consumer)
+        self.rsv.log("DEBUG", "%s submit file:\n%s" % (consumer.name, submit_file_contents), 4)
         return self.submit_job(submit_file_contents, condor_id)
 
 
@@ -253,9 +254,9 @@ class Condor:
         """ Create a submission file for a consumer """
         log_dir = self.rsv.get_consumer_log_dir()
 
-        environment = ""
-        environment += "PATH=/usr/bin:/bin;"
-        environment += "VDT_LOCATION=%s\n" % self.rsv.vdt_location
+        environment = "PATH=/usr/bin:/bin;"
+        environment += "VDT_LOCATION=%s;" % self.rsv.vdt_location
+        environment += consumer.get_environment()
 
         condor_id = consumer.get_unique_name()
 
@@ -303,7 +304,9 @@ class Condor:
         def display_metric(classad):
             status = job_status[int(classad["JobStatus"])]
 
-            next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
+            next_run_time = "UNKNOWN"
+            if "DeferralTime" in classad:
+                next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
 
             match = re.search("\s([\w.-]+)\s*\"", classad["Args"])
             metric = "UNKNOWN?"

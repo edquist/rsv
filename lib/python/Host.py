@@ -73,9 +73,12 @@ class Host:
             
     def write_config_file(self):
         """ Write the config back to the INI file on disk """
-
+        
+        self.rsv.log("INFO", "Writing configuration file '%s'" % self.config_file)
+        
         if not os.path.exists(self.config_file):
             self.rsv.echo("Creating configuration file '%s'" % self.config_file)
             
         config_fp = open(self.config_file, 'w')
         self.config.write(config_fp)
+        config_fp.close()
