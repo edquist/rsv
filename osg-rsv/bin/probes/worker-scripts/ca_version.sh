@@ -1,6 +1,7 @@
 #!/bin/bash 
 
-cat $1/osg/etc/config.ini | grep group  | grep = | grep ITB &> /dev/null
+#cat $1/osg/etc/config.ini | grep group  | grep = | grep ITB &> /dev/null
+cat $1/osg/etc/config.ini | sed -e's/ //g'| grep '^group=OSG-ITB' &>/dev/null
 if [ $? -eq 0 ]; then
   echo "ITB";
 else
