@@ -114,7 +114,7 @@ sub write_data {
     ########################
     my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $ARGV[0] $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
     debug_print("RSV 2 NAGIOS Cmd: $rsvnagios_cmd");
-    #system("$rsvnagios_cmd");
+    system("$rsvnagios_cmd");
 }
 
 sub slurp {
