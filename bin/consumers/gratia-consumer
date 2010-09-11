@@ -5,18 +5,29 @@
 import os
 import re
 import sys
+import time
+import signal
 
-import pdb
+from time import strftime
 
 # Declare globals to hold the imported Gratia and Metric objects
 # We can't import them until we know the value of VDT_LOCATION because we set
 # the import path accordingly.
 Gratia = None
 Metric = None
+CONSUMER_DONE = 0
+LOG_FH = None
 
 class InvalidRecordError(Exception):
     """ Custom exception for a bad record format """
     pass
+
+
+def main():
+    info = initialize()
+    load_gratia_libraries(info)
+    process_files(info)
+    sys.exit(0)
 
 
 def initialize():
@@ -24,8 +35,9 @@ def initialize():
 
     info = {}
 
-    log("Gratia consumer initializing.")
-
+    #
+    # Validate VDT_LOCATION
+    #
     if "VDT_LOCATION" not in os.environ:
         die("ERROR: VDT_LOCATION must be set in the environment")
 
@@ -33,6 +45,17 @@ def initialize():
 
     if not os.path.exists(info["vdt_location"]):
         die("ERROR: VDT_LOCATION is set to a non-existent value: '%s'" % info["vdt_location"])
+
+    #
+    # Open a file for logging all output.  If we print all output to STDOUT it will end up in
+    # a file that Condor will overwrite every time this script executes, so we'll move it to
+    # a more permanent log file and rotate it manually.
+    #
+    log_file = os.path.join(info["vdt_location"], "osg-rsv", "logs", "consumers", "gratia-consumer.output")
+    global LOG_FH
+    LOG_FH = open(log_file, 'a')
+
+    log("Gratia consumer initializing.")
 
     # Where records will be read from
     # This script will delete files from this directory, so it also needs write access.
@@ -62,6 +85,10 @@ def initialize():
 
     # TODO - make this a configuration setting
     info["gratia_config_file"] = os.path.join(info["vdt_location"], "gratia", "probe", "metric", "ProbeConfig")
+
+    # Catch some signals and exit gracefully if we get them
+    signal.signal(signal.SIGINT, sigterm_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
 
     return info
 
@@ -93,6 +120,9 @@ def process_files(info):
     files = os.listdir(info["output_dir"])
     log("Processing %s files" % len(files))
     for filename in files:
+        if CONSUMER_DONE == 1:
+            break
+        
         success = 0
 
         file = os.path.join(info["output_dir"], filename)
@@ -110,10 +140,10 @@ def process_files(info):
                 success = 1
                 
         except InvalidRecordError, err:
-            print "ERROR: Invalid record in file '%s'.  Error: %s" % (file, err)
+            log("ERROR: Invalid record in file '%s'.  Error: %s" % (file, err))
         except Exception, err:
-            print "ERROR: An unknown exception occurred when processing file '%s'. Error: " % file
-            print err
+            log("ERROR: An unknown exception occurred when processing file '%s'. Error: " % file)
+            log(err)
 
         if success:
             try:
@@ -200,7 +230,7 @@ def parse_wlcg_record(raw_record):
                 if match.group(1) == "detailsData":
                     in_details_data = 1
             else:
-                raise InvalidRecordError("Invalid line:\n\t%s" % line)
+                raise InvalidRecordError("Invalid line:\n\t%s\n\nFull record:\n%s" % (line, raw_record))
         else:
             if re.match("EOT$", line):
                 return record
@@ -213,9 +243,12 @@ def parse_wlcg_record(raw_record):
 
 def log(msg):
     """ Print a message with a timestamp """
-    timestamp = "TODO: "
-    # TODO - print to a file
-    print "%s %s" % (timestamp, msg)
+    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    print "%s: %s" % (timestamp, msg)
+
+    if LOG_FH:
+        LOG_FH.write("%s: %s\n" % (timestamp, msg))
+        
 
 def die(msg):
     """ Print an error message and exit with a non-zero status """
@@ -223,7 +256,13 @@ def die(msg):
     sys.exit(1)
 
 
+def sigterm_handler(signum, frame):
+    """ The handler for SIGTERM and SIGKILL """
+    log("Caught signal #%s.  Exiting after processing current record." % signum)
+    global CONSUMER_DONE
+    CONSUMER_DONE = 1
+    return
 
-info = initialize()
-load_gratia_libraries(info)
-process_files(info)
+
+
+main()
