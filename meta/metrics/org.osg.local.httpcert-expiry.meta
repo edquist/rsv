@@ -8,4 +8,4 @@ probe-spec = v3
 need-proxy = false
 
 [org.osg.local.httpcert-expiry env]
-PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes
+PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
