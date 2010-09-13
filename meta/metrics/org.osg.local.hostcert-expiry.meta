@@ -7,6 +7,5 @@ output-format = wlcg
 probe-spec = v3
 need-proxy = false
 
-
 [org.osg.local.hostcert-expiry env]
 PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes

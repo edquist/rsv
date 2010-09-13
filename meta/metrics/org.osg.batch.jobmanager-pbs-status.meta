@@ -9,3 +9,5 @@ probe-spec = v3
 
 [org.osg.batch.jobmanager-pbs-status env]
 PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes
+LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
+GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus

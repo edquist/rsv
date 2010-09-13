@@ -6,6 +6,7 @@ service-type = OSG-GUMS
 output-format = wlcg
 probe-spec = v3
 
-
 [org.osg.gums.authorization-status env]
 PERL5LIB = APPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes
+LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
+GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus
