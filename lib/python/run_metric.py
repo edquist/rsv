@@ -24,15 +24,6 @@ import pdb
 VALID_OUTPUT_FORMATS = ["wlcg", "brief"]
 
 
-def process_arguments():
-    """Process the command line arguments and populate global variables"""
-
-
-
-    return options
-
-
-
 def validate_config(rsv, metric):
     """ Perform validation on config values """
 
@@ -91,12 +82,12 @@ def validate_config(rsv, metric):
     # warn if consumers are missing
     #
     try:
-        consumers = rsv.config.get("consumers", "enabled")
+        consumers = rsv.consumer_config.get("consumers", "enabled")
         rsv.log("INFO", "Registered consumers: %s" % consumers, 0)
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-        if not rsv.config.has_section("consumers"):
-            rsv.config.add_section("consumers")
-        rsv.config.set("consumers", "enabled", "")
+        if not rsv.consumer_config.has_section("consumers"):
+            rsv.consumer_config.add_section("consumers")
+        rsv.consumer_config.set("consumers", "enabled", "")
         rsv.log("WARNING", "no consumers are registered in consumers.conf.  This " +
                 "means that records will not be sent to a central collector for " +
                 "availability statistics.")
@@ -241,11 +232,13 @@ def execute_job(rsv, metric):
                 os.environ[var] = os.environ[var] + ":" + value
             else:
                 os.environ[var] = value
+            rsv.log("DEBUG", "New value of %s:\n%s" % (var, os.environ[var]), 8)
         elif action == "PREPEND":
             if var in os.environ:
                 os.environ[var] = value + ":" + os.environ[var]
             else:
                 os.environ[var] = value
+            rsv.log("DEBUG", "New value of %s:\n%s" % (var, os.environ[var]), 8)
         elif action == "SET":
             os.environ[var] = value
         elif action == "UNSET":
@@ -303,8 +296,7 @@ def execute_job(rsv, metric):
 
 
 def clean_up(exit_code=0):
-    """ Clean up any temporary files before exiting.  Currently there are none.
-    Also - make an effort """
+    """ Clean up any temporary files before exiting.  Currently there are none. """
     sys.exit(exit_code)
 
 

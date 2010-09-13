@@ -34,6 +34,10 @@ class RSV:
     proxy = None
     quiet = 0
 
+    # Cache these values so we don't make a system call each time
+    vdt_pythonpath = None
+    vdt_perl5lib = None
+
     def __init__(self, vdt_location=None, verbosity=1):
 
         # Setup rsv_location
@@ -410,8 +414,10 @@ class RSV:
                     hours_til_expiry, 4)
 
             grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
-            (ret, out, err) = self.run_command("%s -cert %s -key %s -valid 12:00 -debug -out %s" %
-                                               (grid_proxy_init_exe, cert, key, proxy))
+            grid_proxy_init_lib_dir = os.path.join(self.vdt_location, "globus", "lib")
+            libraries = "LD_LIBRARY_PATH=%s" % grid_proxy_init_lib_dir
+            (ret, out, err) = self.run_command("%s %s -cert %s -key %s -valid 12:00 -debug -out %s" %
+                                               (libraries, grid_proxy_init_exe, cert, key, proxy))
 
             if ret:
                 self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
@@ -463,30 +469,38 @@ class RSV:
 
     def get_vdt_pythonpath(self):
         """ Return the PYTHONPATH for Python modules installed by the VDT """
-        self.log("DEBUG", "Determining VDT PYTHONPATH")
+        if self.vdt_pythonpath:
+            return self.vdt_pythonpath
+        
         command = os.path.join(self.vdt_location, "python", "python-setup.py")
         (ret, out, err) = self.run_command(command)
         if ret != 0:
             self.log("WARNING", "Error determining VDT PYTHONPATH\nSTDOUT - %s\nSTDERR - %s" %
                      (out, err))
-            return ""
+            self.vdt_pythonpath = ""
         else:
             self.log("INFO", "VDT PYTHONPATH = %s" % out)
-            return out
+            self.vdt_pythonpath = out
+
+        return self.vdt_pythonpath
 
 
     def get_vdt_perl5lib(self):
         """ Return the PERL5LIB for Perl modules installed by the VDT """
-        self.log("DEBUG", "Determining VDT PERL5LIB")
+        if self.vdt_perl5lib:
+            return self.vdt_perl5lib
+            
         command = os.path.join(self.vdt_location, "perl", "perl-setup.pl")
         (ret, out, err) = self.run_command(command)
         if ret != 0:
             self.log("WARNING", "Error determining VDT PERL5LIB\nSTDOUT - %s\nSTDERR - %s" %
                      (out, err))
-            return ""
+            self.vdt_perl5lib = ""
         else:
             self.log("INFO", "VDT PERL5LIB = %s" % out)
-            return out
+            self.vdt_perl5lib = out
+
+        return self.vdt_perl5lib
 
 
 # End of RSV class

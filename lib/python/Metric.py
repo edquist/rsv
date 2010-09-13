@@ -143,6 +143,8 @@ class Metric:
                     valid_actions = ["SET", "UNSET", "APPEND", "PREPEND"]
                     if action.upper() in ("SET", "UNSET", "APPEND", "PREPEND"):
                         value = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, value)
+                        value = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), value)
+                        value = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), value)
                         env[var] = [action, value]
                     else:
                         self.rsv.log("WARNING", "invalid environment config setting in section '%s'\n" +
