@@ -1,0 +1,131 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use POSIX;
+
+# Turn autoflush on
+$|=1;
+
+# The file we will write all output to
+my $output_fh;
+
+##
+## Make sure we have VDT_LOCATION set in our environment
+##
+my $VDT_LOCATION = $ENV{VDT_LOCATION};
+die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
+die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
+
+if(@ARGV != 1) {
+    die("ERROR: Usage: $0 <path to Nagios config file>");
+}
+
+##
+my $PROBE_LOG_DIRECTORY = "$VDT_LOCATION/osg-rsv/output/nagios-consumer";
+
+# This variable will be set to true if we catch a SIGTERM.  The script will
+# exit after processing the current record completes.
+my $CONSUMER_DONE = 0;
+
+# Allow for graceful shutdown
+$SIG{TERM} = \&catch_term;
+
+##
+## If we print to STDOUT and STDERR, Condor will overwrite the file everytime the
+## script executes.  So we'll use a file to record all output, and rotate it.
+##
+my $output_file = "$VDT_LOCATION/osg-rsv/logs/consumers/nagios-consumer.output";
+open($output_fh, ">>", $output_file) or die("Cannot open '$output_file' for output: $!");
+
+
+## Main loop
+my @files = glob("$PROBE_LOG_DIRECTORY/*");
+debug_print("Beginning execution, found " . scalar(@files) . " files");
+foreach my $file (@files) {
+    last if($CONSUMER_DONE);
+    my $file_data = slurp($file);
+
+    if(!defined($file_data)) {
+        debug_print("Error reading from $file.  Removing record without processing it.");
+    }
+    else {
+        write_data($file, $file_data);
+    }
+
+    unlink($file);
+}
+
+exit;
+
+## -----------------------------------------------------------
+## catch_term
+## SIGTERM handler - used to allow the consumer to exit gently.
+## -----------------------------------------------------------
+sub catch_term {
+    debug_print("Caught signal! Exiting...\n");
+    $CONSUMER_DONE = 1;
+}
+
+
+## -----------------------------------------------------------
+## debug_print
+## Add a timestamp to messages
+## -----------------------------------------------------------
+sub debug_print {
+   my ($str) = @_;
+   my $msg = strftime("%Y-%m-%d %H:%M:%S - $str\n" , localtime);
+   print $msg;
+
+   # Just in case this hasn't been opened yet
+   if(defined($output_fh)) {
+       print $output_fh $msg;
+   }
+}
+
+## -----------------------------------------------------------
+## write_data
+## -----------------------------------------------------------
+sub write_data {
+    my ($file, $data) = @_;
+
+    # detailsData can be on multiple lines, but we do not need that field, only
+    # things that come before it.  So when we see we've reached detailsData then
+    # we'll stop processing.
+    my %info;
+    foreach my $line (split("\n", $data)) {
+        if($line =~ /^\s*(\S+):\s+(.+)$/) {
+            last if $1 eq "detailsData";
+            $info{$1} = $2;
+        }
+    }
+
+    # Check that we got the necessary attributes
+    foreach my $attribute (qw/metricName metricStatus serviceURI timestamp/) {
+        if(not defined($info{$attribute})) {
+            debug_print("ERROR: In file '$file', missing attribute $attribute.  Skipping record.");
+            debug_print("Full record:\n$data");
+            return;
+        }
+    }
+   
+    ########################
+    # Do nagios calls here #
+    ########################
+    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $ARGV[0] $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
+    debug_print("RSV 2 NAGIOS Cmd: $rsvnagios_cmd");
+    system("$rsvnagios_cmd");
+}
+
+sub slurp {
+    my ($file) = @_;
+    
+    if(not open(FILE, "<", $file)) {
+        debug_print("ERROR: Unable to open $file: $!");
+        return undef;
+    }
+    my $contents = join("", <FILE>);
+    close(FILE);
+    
+    return $contents;
+}
