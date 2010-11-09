@@ -155,7 +155,6 @@ sub Do_Gridftp_File_Transfer_To {
     $o{'callingRoutine'} = "Do_Gridftp_File_Transfer_To()";
     
     my $gridftp_cmd = "$o{'globusurlcopyCmd'} $o{'globusurlcopyTestfileUri'} $o{'globusurlcopyRemoteTestfileUri'} 2>&1";
-    print cmd;
     &RSVProbeBase::Run_Command ($gridftp_cmd, "backtick");
 
     &Check_Gridftp_Transfer_Status ("true");
