@@ -155,6 +155,7 @@ sub Do_Gridftp_File_Transfer_To {
     $o{'callingRoutine'} = "Do_Gridftp_File_Transfer_To()";
     
     my $gridftp_cmd = "$o{'globusurlcopyCmd'} $o{'globusurlcopyTestfileUri'} $o{'globusurlcopyRemoteTestfileUri'} 2>&1";
+    print cmd;
     &RSVProbeBase::Run_Command ($gridftp_cmd, "backtick");
 
     &Check_Gridftp_Transfer_Status ("true");
@@ -185,6 +186,16 @@ sub Do_Gridftp_File_Transfer_From {
     $o{'callingRoutine'} = "Do_Gridftp_File_Transfer_From()";
     
     my $gridftp_cmd = "$o{'globusurlcopyCmd'} $o{'globusurlcopyRemoteTestfileUri'} $o{'globusurlcopyBackTestfileUri'} 2>&1";
+
+    # I asked the original developer, Arvind Gopu, about why this probe needs to sleep
+    # between the transfer to and from.  Here is his response:
+    #
+    # The 60 second value is arbitrary but the delay was definitely necessary because sometimes
+    # GridFTP introduces a slight delay between when the copy has completed and when the copy
+    # is claimed to be completed. From what I recall, there were cases, where the probe would
+    # try to copy back the file from the destination server only for Globus to complain the
+    # file does not exist on that server. 
+
     &RSVProbeBase::Verbose ("Sleeping for $o{'gridftpDelaySeconds'} seconds before attempting to transfer file back ... \n");
     sleep ($o{'gridftpDelaySeconds'});
     &RSVProbeBase::Run_Command ($gridftp_cmd, "backtick");
@@ -318,11 +329,9 @@ sub Cleanup {
     my $cleanup_local_cmd = "$o{'rmCmd'} $o{'globusurlcopyBackTestfile'} 2>&1";
     &RSVProbeBase::Run_Command ($cleanup_local_cmd, "backtick");
     my $cleanup_remote_cmd = "$o{'rmCmd'} $o{'globusurlcopyRemoteTestfile'} 2>&1";
-    &RSVProbeBase::Globus_Job_Run($cleanup_remote_cmd, "backtick");
+    my $uberftp_cmd=$o{'VDT_LOCATION_LOCAL'}."/globus/bin/uberftp -rm ".$o{'globusurlcopyRemoteTestfileUri'};
+    &RSVProbeBase::Run_Command ($uberftp_cmd, "backtick");
 }
-
-
-
 
 
 
